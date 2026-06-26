@@ -1,0 +1,14 @@
+{
+  "langrev": "1",
+  "warnings": [ "no-unused" ],
+  "dependency-search-paths": [ "libs" ],
+  "dependencies": [ "vma", "sdl3", "vk" ],
+  "sources": [ "src/**" ],
+  "output": "build",
+  "targets": {
+    "smoke": {
+      "type": "executable",
+      "target": "linux-x64"
+    }
+  }
+}

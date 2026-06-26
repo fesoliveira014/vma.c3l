@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$CLAUDE_PROJECT_DIR/.claude/hooks/c3-syntax-check.sh\"",
+            "timeout": 30,
+            "statusMessage": "c3c syntax check"
+          }
+        ]
+      }
+    ]
+  }
+}
