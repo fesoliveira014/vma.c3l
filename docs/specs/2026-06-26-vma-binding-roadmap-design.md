@@ -129,9 +129,14 @@ Each milestone is independently shippable and testable. M0 unblocks everything.
   `vmaDestroyImage`, `vmaMapMemory` / `vmaUnmapMemory`,
   `vmaFlushAllocation(s)` / `vmaInvalidateAllocation(s)`,
   `vmaBindBufferMemory(2)` / `vmaBindImageMemory(2)`,
-  `vmaCopyMemoryToAllocation` / `vmaCopyAllocationToMemory`.
-- **Runnable test:** map a host-visible buffer, write, flush, unmap; create an
-  image.
+  `vmaCopyMemoryToAllocation` / `vmaCopyAllocationToMemory`. Idiomatic `try_map`
+  returns a bounded `char[]` slice; `try_create_image` returns an
+  `ImageAllocation` (mirror of `BufferAllocation`). The batch (`*Allocations`)
+  and `*2` bind variants are bound compile-checked-only. No new layout-pinned
+  structs — M2 reuses M1's structs and vk's. See
+  [M2 design](2026-06-26-m2-memory-images-design.md).
+- **Runnable test:** map a host-visible buffer, write, flush, read back; create
+  an image; manual allocate-for-buffer → bind → free.
 
 ### M3 — Statistics & budget
 - Bind: `Statistics`, `DetailedStatistics`, `TotalStatistics`, `Budget`
