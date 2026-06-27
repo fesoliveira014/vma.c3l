@@ -1,3 +1,35 @@
 module vma;
 
-// extern fn int some_library_function();
+import vk;
+
+typedef Allocator = inline void*;
+
+bitstruct AllocatorCreateFlags : uint {
+    bool externally_synchronized    : 0;
+    bool khr_dedicated_allocation   : 1;
+    bool khr_bind_memory2           : 2;
+    bool ext_memory_budget          : 3;
+    bool amd_device_coherent_memory : 4;
+    bool buffer_device_address      : 5;
+    bool ext_memory_priority        : 6;
+    bool khr_maintenance4           : 7;
+    bool khr_maintenance5           : 8;
+    bool khr_external_memory_win32  : 9;
+}
+
+struct AllocatorCreateInfo {
+    AllocatorCreateFlags     flags;
+    vk::PhysicalDevice       physical_device;
+    vk::Device               device;
+    vk::DeviceSize           preferred_large_heap_block_size;
+    vk::AllocationCallbacks* allocation_callbacks;
+    void*                    device_memory_callbacks;
+    vk::DeviceSize*          heap_size_limit;
+    void*                    vulkan_functions;
+    vk::Instance             instance;
+    uint                     vulkan_api_version;
+}
+$assert(AllocatorCreateInfo::size == 80);
+
+extern fn vk::Result create_allocator(AllocatorCreateInfo* info, Allocator* out) @cname("vmaCreateAllocator");
+extern fn void Allocator.destroy(self) @cname("vmaDestroyAllocator");
