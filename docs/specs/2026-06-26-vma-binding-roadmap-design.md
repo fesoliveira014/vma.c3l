@@ -61,11 +61,16 @@ file kind, both `module vma;`:
 
 - **Raw layer** (`vma.c3i`, plus per-topic `vma_*.c3i`): opaque handles,
   fully-declared + layout-pinned structs, enums / bitstructs, and `extern fn`
-  declarations. Returns are faithful (`vk::Result`); functions that act on a
-  handle use method syntax (`fn vk::Result Allocator.create(...)`,
-  `fn void Allocator.destroy(&self)`). `@cname("vmaXxx")` holds the real C
-  symbol verbatim. (`@extern`-as-a-rename-attribute was removed in C3 0.8.0;
-  `@cname` replaces it. The `extern fn` keyword is unchanged.)
+  declarations. Returns are faithful (`vk::Result`). A function whose **first**
+  parameter is the handle uses method syntax with the receiver by value, since
+  the handle is an `inline void*` typedef (`fn void Allocator.destroy(self)` for
+  `vmaDestroyAllocator(allocator)`); a function whose handle is an out-parameter
+  is a **free function** (`fn vk::Result create_allocator(AllocatorCreateInfo*,
+  Allocator*)` for `vmaCreateAllocator(info*, allocator*)` — C3 requires a
+  method's first parameter to be the receiver type, so a constructor cannot be a
+  method). `@cname("vmaXxx")` holds the real C symbol verbatim.
+  (`@extern`-as-a-rename-attribute was removed in C3 0.8.0; `@cname` replaces
+  it. The `extern fn` keyword is unchanged.)
 - **Idiomatic layer** (`vma.c3`, plus per-topic `vma_*.c3`): fault-returning
   wrappers (bodies) and the `faultdef` block.
 
