@@ -1,0 +1,62 @@
+module vma;
+
+import vk;
+
+typedef Allocation = inline void*;
+
+enum MemoryUsage : int {
+    UNKNOWN,
+    GPU_ONLY,
+    CPU_ONLY,
+    CPU_TO_GPU,
+    GPU_TO_CPU,
+    CPU_COPY,
+    GPU_LAZILY_ALLOCATED,
+    AUTO,
+    AUTO_PREFER_DEVICE,
+    AUTO_PREFER_HOST,
+}
+
+bitstruct AllocationCreateFlags : uint {
+    bool dedicated_memory                   : 0;
+    bool never_allocate                     : 1;
+    bool mapped                             : 2;
+    bool user_data_copy_string              : 5;
+    bool upper_address                      : 6;
+    bool dont_bind                          : 7;
+    bool within_budget                      : 8;
+    bool can_alias                          : 9;
+    bool host_access_sequential_write       : 10;
+    bool host_access_random                 : 11;
+    bool host_access_allow_transfer_instead : 12;
+    bool strategy_min_memory                : 16;
+    bool strategy_min_time                  : 17;
+}
+
+struct AllocationCreateInfo {
+    AllocationCreateFlags   flags;
+    MemoryUsage             usage;
+    vk::MemoryPropertyFlags required_flags;
+    vk::MemoryPropertyFlags preferred_flags;
+    uint                    memory_type_bits;
+    void*                   pool;
+    void*                   user_data;
+    float                   priority;
+}
+// 48 assumes the lib was built with VMA_EXTERNAL_MEMORY=0 (scripts/build-vma.sh).
+$assert(AllocationCreateInfo::size == 48);
+
+struct AllocationInfo {
+    uint             memory_type;
+    vk::DeviceMemory device_memory;
+    vk::DeviceSize   offset;
+    vk::DeviceSize   size;
+    void*            mapped_data;
+    void*            user_data;
+    char*            name;
+}
+$assert(AllocationInfo::size == 56);
+
+extern fn vk::Result Allocator.create_buffer(self, vk::BufferCreateInfo* buffer_info, AllocationCreateInfo* alloc_info, vk::Buffer* out_buffer, Allocation* out_allocation, AllocationInfo* out_info) @cname("vmaCreateBuffer");
+extern fn void Allocator.destroy_buffer(self, vk::Buffer buffer, Allocation allocation) @cname("vmaDestroyBuffer");
+extern fn void Allocator.get_allocation_info(self, Allocation allocation, AllocationInfo* out_info) @cname("vmaGetAllocationInfo");
