@@ -62,16 +62,25 @@ else
   # Bare library file (no consumer project.json). If a sibling test/libs with
   # the Vulkan binding exists, resolve external imports against it so files that
   # `import vk` do not false-fail; otherwise fall back to the isolated check.
+  fdir=$(dirname "$f")
   libs_dir=""
-  d=$(dirname "$f")
+  d="$fdir"
   while [ "$d" != "/" ] && [ -n "$d" ]; do
     if [ -d "$d/test/libs" ]; then libs_dir="$d/test/libs"; break; fi
     d=$(dirname "$d")
   done
+  # Compile all sibling module files in the file's directory together so
+  # cross-file references (e.g. vma.c3 -> types declared in vma.c3i) resolve;
+  # a single bare file false-fails on symbols defined in its module's siblings.
+  set --
+  for sib in "$fdir"/*.c3i "$fdir"/*.c3; do
+    [ -e "$sib" ] && set -- "$@" "$sib"
+  done
+  [ "$#" -eq 0 ] && set -- "$f"
   if [ -n "$libs_dir" ]; then
-    out=$(c3c compile-only --no-obj --libdir "$libs_dir" --lib vk "$f" 2>&1)
+    out=$(c3c compile-only --no-obj --libdir "$libs_dir" --lib vk "$@" 2>&1)
   else
-    out=$(c3c compile-only --no-obj "$f" 2>&1)
+    out=$(c3c compile-only --no-obj "$@" 2>&1)
   fi
   rc=$?
   rm -rf obj 2>/dev/null
