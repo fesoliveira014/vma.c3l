@@ -183,10 +183,13 @@ The `test/src/vk_bootstrap.c3` helper (built in M0) owns instance/device creatio
 and is shared by every milestone's smoke test. Pure-CPU tests (handle math,
 virtual allocator) need no device at all.
 
-**SDL3 is demoted off the VMA critical path.** It remains a declared test
-dependency, reserved for a future optional windowed/swapchain demo — VMA itself
-never needs a surface. This is a deliberate change from SDL3's original "window
-provider for testing" role.
+**SDL3 is demoted off the VMA critical path.** The `sdl3.c3l` submodule and its
+manifest target stay in the repo, but SDL3 is **not** a dependency of the
+headless smoke target — a headless test never imports `sdl`, and hard-linking
+`libSDL3` would force it to be installed for no benefit (it is absent on the
+dev/CI machine). SDL3 will be wired into a **separate windowed-demo target** if
+and when that lands; VMA itself never needs a surface. This is a deliberate
+change from SDL3's original "window provider for testing" role.
 
 ## Repository layout growth
 

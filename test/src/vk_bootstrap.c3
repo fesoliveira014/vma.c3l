@@ -2,7 +2,9 @@ module vma_smoke;
 
 import vk;
 
-faultdef NO_PHYSICAL_DEVICE, NO_USABLE_DEVICE;
+faultdef
+    NO_PHYSICAL_DEVICE,
+    NO_USABLE_DEVICE;
 
 const uint VK_API_1_0 = 1 << 22;
 
