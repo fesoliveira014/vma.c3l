@@ -53,7 +53,7 @@ struct AllocationInfo {
     vk::DeviceSize   size;
     void*            mapped_data;
     void*            user_data;
-    char*            name;
+    ZString          name;
 }
 $assert(AllocationInfo::size == 56);
 
