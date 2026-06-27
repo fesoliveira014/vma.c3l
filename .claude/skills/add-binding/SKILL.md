@@ -1,6 +1,6 @@
 ---
 name: add-binding
-description: Add a VMA C-API binding to the vma module following docs/bindings_guidelines.md and docs/style.md. Use when binding a new VMA function, handle, struct, or enum (e.g. "bind vmaCreateAllocator", "/add-binding vmaAllocateMemory"). Reads the real vk_mem_alloc.h for exact signatures, then applies the project's naming, opaque-vs-declared, @extern, and compile-check rules.
+description: Add a VMA C-API binding to the vma module following docs/bindings_guidelines.md and docs/style.md. Use when binding a new VMA function, handle, struct, or enum (e.g. "bind vmaCreateAllocator", "/add-binding vmaAllocateMemory"). Reads the real vk_mem_alloc.h for exact signatures, then applies the project's naming, opaque-vs-declared, @cname, and compile-check rules.
 ---
 
 # Add a VMA binding
@@ -30,8 +30,8 @@ Strip the `Vma` prefix on the C3 side; keep the real symbol verbatim in `@extern
 
 - **Functions** → `snake_case`, prefix stripped. Most of VMA acts on a handle (`vmaCreateAllocator`, `vmaDestroyAllocator`, `vmaAllocateMemory` all take or produce `VmaAllocator`), so use method syntax `fn Ret Type.method(...)`. Keep the C return type faithful — VMA returns `VkResult`; do NOT fault-wrap inside the extern, that is an engine-side helper's job.
   ```c3
-  extern fn VkResult Allocator.create(AllocatorCreateInfo* info, Allocator* out) @extern("vmaCreateAllocator");
-  extern fn void     Allocator.destroy(&self) @extern("vmaDestroyAllocator");
+  extern fn VkResult Allocator.create(AllocatorCreateInfo* info, Allocator* out) @cname("vmaCreateAllocator");
+  extern fn void     Allocator.destroy(&self) @cname("vmaDestroyAllocator");
   ```
   (`VkResult` here resolves to the Vulkan binding's type — see §2.)
 - **Types** → `PascalCase`, strip `Vma` and any `_t`. Use `@opaque` when C3 only holds and passes the pointer — every `VK_DEFINE_HANDLE` handle (`Allocator`, `Allocation`, `Pool`, `DefragmentationContext`). Fully declare a struct ONLY when C3 reads its fields, matching the C layout field-for-field.

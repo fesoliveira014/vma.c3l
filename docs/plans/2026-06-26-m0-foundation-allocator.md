@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - **C3 0.8.0 only.** Verify any uncertain syntax with `c3c compile-only --no-obj`.
-- **Use `@cname("vmaXxx")`, NOT `@extern("...")`.** `@extern` as a rename attribute was removed in 0.8.0; the project docs (CLAUDE.md, docs/style.md, docs/bindings_guidelines.md, add-binding skill) still say `@extern` and are stale on this point. `vk.c3l` confirms `@cname` is the working form.
+- **Use `@cname("vmaXxx")` for C symbol renames — not the old `@extern` attribute.** `@extern` as a rename attribute was removed in C3 0.8.0; use `@cname` instead. All project docs (CLAUDE.md, docs/style.md, docs/bindings_guidelines.md, add-binding skill) have been updated to reflect this. `vk.c3l` confirms `@cname` is the working form.
 - **Method receiver must be the first parameter.** A C function whose handle is not the first arg (e.g. `vmaCreateAllocator(info*, allocator*)`) is bound as a **free function**, not a method. Only allocator-first functions (`vmaDestroyAllocator(allocator)`) are methods.
 - **Naming:** types `PascalCase` (strip `Vma`), functions `snake_case`, constants/flags `SCREAMING_SNAKE_CASE`. Struct/constdef names may not be all-uppercase (C3 rejects them).
 - **Layout pinning:** every fully-declared struct gets `$assert(T::size == N)` with `N` measured by a C++ probe compiled against the real header with the same defines as the lib build.

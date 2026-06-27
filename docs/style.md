@@ -288,7 +288,7 @@ The C library binding rules in §8 / CLAUDE.md Appendix make a deliberate except
 
 - Calls with **≥ 4 arguments** OR a single-line form **> 120 characters** use named parameters, **one per line**, with a **trailing comma** after the last argument.
 - Calls with ≤ 3 args that fit under 120 chars stay positional, no trailing comma.
-- This applies to **call sites only**, not function definitions or `@extern` declarations. Struct-literal field-inits already use named fields and are unaffected.
+- This applies to **call sites only**, not function definitions or `extern fn` declarations. Struct-literal field-inits already use named fields and are unaffected.
 
 Examples:
 
@@ -328,7 +328,7 @@ The full set of conventions for binding C libraries lives in CLAUDE.md, Appendix
 - Strip multi-word prefixes too (`SDL_GL_*` → `sdl::gl::*` sub-module).
 - For `Class_Method`-style C APIs (Jolt), use C3 method syntax: `fn Ret Type.method(&self, ...)`.
 - For backend-pluggable libraries (ImGui), put each backend in its own sub-module (`imgui::gl`, `imgui::sdl`).
-- The `@extern("...")` string is the real C symbol — keep prefix, casing, and punctuation verbatim.
+- The `@cname("...")` string is the real C symbol — keep prefix, casing, and punctuation verbatim. (`@extern`-as-a-rename-attribute was removed in C3 0.8.0; `@cname` replaces it.)
 - Bind only the surface you actually use. The binding grows across milestones.
 
 ---

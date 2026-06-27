@@ -63,8 +63,9 @@ file kind, both `module vma;`:
   fully-declared + layout-pinned structs, enums / bitstructs, and `extern fn`
   declarations. Returns are faithful (`vk::Result`); functions that act on a
   handle use method syntax (`fn vk::Result Allocator.create(...)`,
-  `fn void Allocator.destroy(&self)`). `@extern("vmaXxx")` holds the real C
-  symbol verbatim.
+  `fn void Allocator.destroy(&self)`). `@cname("vmaXxx")` holds the real C
+  symbol verbatim. (`@extern`-as-a-rename-attribute was removed in C3 0.8.0;
+  `@cname` replaces it. The `extern fn` keyword is unchanged.)
 - **Idiomatic layer** (`vma.c3`, plus per-topic `vma_*.c3`): fault-returning
   wrappers (bodies) and the `faultdef` block.
 
@@ -160,7 +161,11 @@ Each milestone is independently shippable and testable. M0 unblocks everything.
   `vmaCreateBufferWithAlignment`, `vmaAllocateMemoryPages` /
   `vmaFreeMemoryPages`, `vmaAllocateMemoryForImage`.
 - Populate `linked-libs/` for the remaining 15 targets via the build script and
-  available toolchains.
+  available toolchains. Note: per-target `linked-libraries` in `manifest.json`
+  vary by toolchain — `stdc++` for linux/gcc, but `c++` (libc++) for
+  macOS/clang. The `scripts/build-vma.sh` size probe (`vma_size_probe.cpp`)
+  must be re-run per toolchain when populating each target to confirm the
+  `AllocatorCreateInfo` layout hasn't shifted.
 - Docs polish.
 
 ### Dependencies between milestones

@@ -25,5 +25,5 @@ Load-bearing points:
 - **Invoke the `c3-expert` skill** before writing, editing, or reviewing any C3, or diagnosing a c3c error. C3 is pre-1.0; syntax drifts. This repo targets **C3 0.8.0** (e.g. `T::size`, not `T.sizeof`).
 - **Do not run `c3fmt`** — it is too aggressive for this codebase. Hand-format per `docs/style.md` (K&R braces, naming, one-fault-per-line).
 - **Namespace isolates the library.** The C prefix never appears on the C3 side: `vma::create_allocator`, not `vmaCreateAllocator`. Functions `snake_case`, types `PascalCase`, constants `SCREAMING_SNAKE_CASE` — all with the C prefix stripped. No `@builtin`.
-- **`@extern("...")` holds the real C symbol verbatim** (keep `vma` prefix, exact casing): `extern fn ... Allocator.create(...) @extern("vmaCreateAllocator");`.
+- **`@cname("...")` holds the real C symbol verbatim** (keep `vma` prefix, exact casing): `extern fn ... Allocator.create(...) @cname("vmaCreateAllocator");`. (`@extern`-as-a-rename-attribute was removed in C3 0.8.0; `@cname` replaces it. The `extern fn` keyword is unchanged.)
 - **Bind incrementally** — only the surface actually used; the binding grows over time.

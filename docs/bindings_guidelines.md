@@ -6,7 +6,7 @@ Targets C3 0.8.0. For struct-layout checks use `@sizeof(expr)` (value) or `T::si
 
 ## The core principle
 
-The **module namespace** is what isolates the library, not the original C prefix. Every downstream call site reads `library::identifier`, and the library prefix never appears on the C3 side. The `@extern("original_c_name")` annotation is the only place the C symbol name survives, because the linker needs it.
+The **module namespace** is what isolates the library, not the original C prefix. Every downstream call site reads `library::identifier`, and the library prefix never appears on the C3 side. The `@cname("original_c_name")` annotation is the only place the C symbol name survives, because the linker needs it. (`@extern`-as-a-rename-attribute was removed in C3 0.8.0; `@cname` replaces it.)
 
 This means no `@builtin` attributes on binding declarations — `@builtin` promotes symbols to global scope, which defeats the module namespace the binding is trying to provide. If you find yourself reaching for `@builtin` to avoid typing the module prefix, you're fighting the language; type the prefix.
 
@@ -43,9 +43,9 @@ Each sub-module declares its own module name (`module imgui::gl;`) and `import`s
 When a C library's function naming already follows a `Class_Method` pattern (Jolt and joltc are the textbook case), lift that structure into C3's method syntax. Declare methods directly on the type using `fn Ret Type.method(&self, ...)`:
 
 ```c3
-extern fn PhysicsSystem* PhysicsSystem.create(PhysicsSystemSettings* s) @extern("JPH_PhysicsSystem_Create");
-extern fn void           PhysicsSystem.update(&self, float dt, int steps) @extern("JPH_PhysicsSystem_Update");
-extern fn BodyInterface* PhysicsSystem.get_body_interface(&self) @extern("JPH_PhysicsSystem_GetBodyInterface");
+extern fn PhysicsSystem* PhysicsSystem.create(PhysicsSystemSettings* s) @cname("JPH_PhysicsSystem_Create");
+extern fn void           PhysicsSystem.update(&self, float dt, int steps) @cname("JPH_PhysicsSystem_Update");
+extern fn BodyInterface* PhysicsSystem.get_body_interface(&self) @cname("JPH_PhysicsSystem_GetBodyInterface");
 ```
 
 Call sites then read naturally:
@@ -56,7 +56,7 @@ ps.update(dt, 1);
 jolt::BodyInterface* bi = ps.get_body_interface();
 ```
 
-Constructors don't take `&self` and are invoked as `Type.method(...)` returning a new instance. Instance methods take `&self` as the first parameter and are invoked as `instance.method(...)`. The C3 compiler de-sugars `ps.update(dt, 1)` into `PhysicsSystem.update(ps, dt, 1)`, which through the `@extern` annotation calls the real C symbol. The method-style ergonomics are purely a C3 surface; the wire format is unchanged.
+Constructors don't take `&self` and are invoked as `Type.method(...)` returning a new instance. Instance methods take `&self` as the first parameter and are invoked as `instance.method(...)`. The C3 compiler de-sugars `ps.update(dt, 1)` into `PhysicsSystem.update(ps, dt, 1)`, which through the `@cname` annotation calls the real C symbol. The method-style ergonomics are purely a C3 surface; the wire format is unchanged.
 
 Where multiple concrete types in the C library share one underlying handle (Jolt's `BoxShape`, `SphereShape`, `HeightFieldShape` all produce `Shape*`), declare them as C3 aliases of the underlying type so each can carry its own `.create()` constructor:
 
@@ -65,20 +65,20 @@ alias BoxShape         = Shape;
 alias SphereShape      = Shape;
 alias HeightFieldShape = Shape;
 
-extern fn Shape* BoxShape.create(Vec3* half_ext, float density) @extern("JPH_BoxShape_Create");
-extern fn Shape* SphereShape.create(float radius, float density) @extern("JPH_SphereShape_Create");
+extern fn Shape* BoxShape.create(Vec3* half_ext, float density) @cname("JPH_BoxShape_Create");
+extern fn Shape* SphereShape.create(float radius, float density) @cname("JPH_SphereShape_Create");
 ```
 
 Don't force method syntax onto flat C APIs that don't have a `Class_Method` structure. Flecs and SDL3 are naturally flat and stay as module-level functions. Jolt is the exception that earned the method-syntax treatment.
 
 ## Macro-heavy declarative C APIs
 
-When a C library uses macros to provide declarative syntax (Clay's `CLAY(decl) { children }` block macros are the example), use C3's body-macro feature (`;@body` parameter) to replicate the trailing-block form without the C preprocessor tricks. The library's flat C entry points become `@extern @private` internal hooks, and the public interface is a thin C3 macro layer on top:
+When a C library uses macros to provide declarative syntax (Clay's `CLAY(decl) { children }` block macros are the example), use C3's body-macro feature (`;@body` parameter) to replicate the trailing-block form without the C preprocessor tricks. The library's flat C entry points become `@cname @private` internal hooks, and the public interface is a thin C3 macro layer on top:
 
 ```c3
-extern fn void __open_element() @extern("Clay__OpenElement") @private;
-extern fn void __configure_open_element(ElementDeclaration decl) @extern("Clay__ConfigureOpenElement") @private;
-extern fn void __close_element() @extern("Clay__CloseElement") @private;
+extern fn void __open_element() @cname("Clay__OpenElement") @private;
+extern fn void __configure_open_element(ElementDeclaration decl) @cname("Clay__ConfigureOpenElement") @private;
+extern fn void __close_element() @cname("Clay__CloseElement") @private;
 
 macro @element(ElementDeclaration decl; @body) {
     __open_element();
@@ -102,9 +102,9 @@ Bind only the surface you actually use. A C library's full API can be hundreds o
 
 The trade-off is that "the binding" is never "done" — it expands across milestones. That's fine, and often desirable: each milestone's binding additions appear in the milestone doc as a focused, reviewable extension rather than hiding in a monolithic binding file nobody reads.
 
-## `@extern` strings
+## `@cname` strings
 
-The string passed to `@extern` is the real C symbol, verbatim. Always keep the library prefix, the exact casing, and the exact punctuation there — this is ABI-level and the linker uses it to resolve the symbol. Don't be alarmed seeing `SDL_`, `JPH_`, `ImGui_`, `Clay_`, `ecs_`, etc. inside `@extern("...")` strings; that's correct and necessary. The C3 identifier beside the string is what downstream code calls.
+The string passed to `@cname` is the real C symbol, verbatim. Always keep the library prefix, the exact casing, and the exact punctuation there — this is ABI-level and the linker uses it to resolve the symbol. Don't be alarmed seeing `SDL_`, `JPH_`, `ImGui_`, `Clay_`, `ecs_`, etc. inside `@cname("...")` strings; that's correct and necessary. The C3 identifier beside the string is what downstream code calls.
 
 ## Directory and file layout
 
@@ -132,7 +132,7 @@ Match the C struct layout byte-for-byte: field order, field widths, padding. Tes
 
 ## Engine-side helpers vs. binding declarations
 
-Not every C3 function in a binding module is an `@extern` declaration. Small engine-side convenience macros (`register_component`, `ecs_get`, `ecs_set` in Flecs, or the sizing helpers in Clay) that wrap lower-level extern calls belong in the same module because they're the idiomatic way to use the library — but they're pure C3, no `@extern`, no C symbol. Keep them close to the extern declarations they wrap so the full picture of "how to use this library from C3" lives in one place.
+Not every C3 function in a binding module is an `@cname` declaration. Small engine-side convenience macros (`register_component`, `ecs_get`, `ecs_set` in Flecs, or the sizing helpers in Clay) that wrap lower-level extern calls belong in the same module because they're the idiomatic way to use the library — but they're pure C3, no `@cname`, no C symbol. Keep them close to the extern declarations they wrap so the full picture of "how to use this library from C3" lives in one place.
 
 ## What idiomatic C3 bindings end up looking like
 
