@@ -2,7 +2,7 @@
   "langrev": "1",
   "warnings": [ "no-unused" ],
   "dependency-search-paths": [ "libs" ],
-  "dependencies": [ "vma", "sdl3", "vk" ],
+  "dependencies": [ "vma", "vk" ],
   "sources": [ "src/**" ],
   "output": "build",
   "targets": {
