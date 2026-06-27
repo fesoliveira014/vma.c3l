@@ -117,14 +117,17 @@ Each milestone is independently shippable and testable. M0 unblocks everything.
 ### M1 — Memory allocation + buffer round-trip
 - Bind: `Allocation` (handle), `AllocationCreateInfo`, `AllocationInfo`,
   `MemoryUsage` (enum), `AllocationCreateFlagBits` (bitstruct);
-  `vmaCreateBuffer` / `vmaDestroyBuffer`, `vmaAllocateMemory` /
-  `vmaAllocateMemoryForBuffer` / `vmaFreeMemory`, `vmaGetAllocationInfo`
-  (+ idiomatic wrappers).
+  `vmaCreateBuffer` / `vmaDestroyBuffer`, `vmaGetAllocationInfo`
+  (+ idiomatic `try_create_buffer` returning a `BufferAllocation` result struct).
+  The lower-level `vmaAllocateMemory*` are deferred to M2 (untestable without
+  `vmaBindBufferMemory`). See [M1 design](2026-06-26-m1-memory-buffer-design.md).
 - **Runnable test:** create_buffer → query `AllocationInfo` → destroy_buffer.
 
 ### M2 — Images, mapping, flush, bind
-- Bind: `vmaCreateImage` / `vmaDestroyImage`, `vmaMapMemory` /
-  `vmaUnmapMemory`, `vmaFlushAllocation(s)` / `vmaInvalidateAllocation(s)`,
+- Bind: `vmaAllocateMemory` / `vmaAllocateMemoryForBuffer` / `vmaFreeMemory`
+  (moved from M1 — now testable via the bind calls below); `vmaCreateImage` /
+  `vmaDestroyImage`, `vmaMapMemory` / `vmaUnmapMemory`,
+  `vmaFlushAllocation(s)` / `vmaInvalidateAllocation(s)`,
   `vmaBindBufferMemory(2)` / `vmaBindImageMemory(2)`,
   `vmaCopyMemoryToAllocation` / `vmaCopyAllocationToMemory`.
 - **Runnable test:** map a host-visible buffer, write, flush, unmap; create an
