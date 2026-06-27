@@ -29,6 +29,7 @@ struct AllocatorCreateInfo {
     vk::Instance             instance;
     uint                     vulkan_api_version;
 }
+// 80 assumes VMA_EXTERNAL_MEMORY=0 (as built by scripts/build-vma.sh); both must change together.
 $assert(AllocatorCreateInfo::size == 80);
 
 extern fn vk::Result create_allocator(AllocatorCreateInfo* info, Allocator* out) @cname("vmaCreateAllocator");

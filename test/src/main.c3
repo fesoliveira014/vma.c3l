@@ -6,7 +6,7 @@ import std::io;
 
 fn int main() {
     if (catch err = run()) {
-        io::printn("vma smoke FAILED");
+        io::printfn("vma smoke FAILED: %s", err);
         return 1;
     }
     io::printn("vma smoke OK: allocator create/destroy");
