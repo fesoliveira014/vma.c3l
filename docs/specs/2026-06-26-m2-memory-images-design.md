@@ -105,14 +105,20 @@ fn void?            Allocator.try_bind_image_memory(self, Allocation, vk::Image)
 Extend the headless smoke (M0 device, M1 allocator) with three paths:
 
 1. **Map round-trip.** Create a host-visible buffer (`MemoryUsage.AUTO` +
-   `host_access_sequential_write`), `try_map` → write a known byte pattern → `try_flush`
-   → `unmap`. Then `try_invalidate` and re-`try_map` (or `try_copy_from_allocation`)
-   → assert the bytes read back match the pattern. Destroy the buffer.
+   `host_access_random` — random, not sequential-write, so the readback below is
+   valid), `try_map` → write a known byte pattern → `try_flush` → `unmap`. Then
+   `try_invalidate` and re-`try_map` → assert the bytes read back match; also
+   `try_copy_to_allocation`/`try_copy_from_allocation` a second pattern and assert.
+   Destroy the buffer.
 2. **Image.** `try_create_image` for a small 2D image (e.g. 64×64 `R8G8B8A8_UNORM`,
-   `OPTIMAL` tiling, `SAMPLED | TRANSFER_DST` usage, `usage = AUTO`) → assert image +
-   allocation non-null → `destroy_image`.
+   `OPTIMAL` tiling, `SAMPLED | TRANSFER_DST` usage, `usage = AUTO`) → `destroy_image`.
+   Success is gated by `check()` inside `try_create_image` (a successful create
+   yields non-null handles), so no explicit null assertions are needed.
 3. **Manual alloc + bind.** Create a raw `VkBuffer` via `vk::create_buffer` →
-   `try_allocate_memory_for_buffer` → `try_bind_buffer_memory` → `free_memory` +
+   `try_allocate_memory_for_buffer` (with `MemoryUsage.GPU_ONLY` — `AUTO*` is
+   invalid for `vmaAllocateMemoryForBuffer`, which has no buffer-usage context and
+   asserts; AUTO works only with `vmaCreateBuffer`/`Image`) → `try_bind_buffer_memory`
+   → teardown destroys the buffer before `free_memory` frees its backing memory →
    `vk::destroy_buffer`.
 
 All headless on lavapipe, exit 0 on success, same gate shape as M0/M1. The batch
@@ -135,3 +141,12 @@ test/src/main.c3 (M2)      extended with the three round-trip paths
 - Custom pools (the `pool` field stays `void*`/null), defragmentation, virtual allocator.
 - Sparse-binding page functions (`vmaAllocateMemoryPages`/`vmaFreeMemoryPages`).
 - Aliasing buffers/images, `vmaCreateBufferWithAlignment`.
+- `vmaAllocateMemoryForImage` — not bound. Consequence: `try_bind_image_memory`
+  has no in-binding allocation source (the manual image-bind path needs raw `vk`
+  memory-requirements). Bind it alongside when a manual image path is actually
+  needed.
+- Runtime coverage for the compile-checked-only variants
+  (`flush_allocations`/`invalidate_allocations`, `bind_buffer_memory2`/
+  `bind_image_memory2`, `allocate_memory`). Add a runtime exercise the first time a
+  later milestone calls one — especially `bind_*_memory2` with a non-null `pNext`,
+  which needs the `khr_bind_memory2` allocator flag or Vulkan ≥ 1.1.
