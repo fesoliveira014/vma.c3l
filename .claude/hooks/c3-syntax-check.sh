@@ -55,7 +55,16 @@ PY
 '
   for a in $lib_args; do set -- "$@" "$a"; done
   unset IFS
-  out=$(cd "$proj_dir" && c3c compile-only --no-obj "$@" "$f" 2>&1)
+  # Compile sibling source files in the edited file's directory together so
+  # cross-file references (e.g. main.c3 -> HeadlessVk in vk_bootstrap.c3) resolve;
+  # a single bare file false-fails on symbols defined in its module's siblings.
+  fdir=$(dirname "$f")
+  added=0
+  for sib in "$fdir"/*.c3i "$fdir"/*.c3; do
+    [ -e "$sib" ] && { set -- "$@" "$sib"; added=1; }
+  done
+  [ "$added" -eq 0 ] && set -- "$@" "$f"
+  out=$(cd "$proj_dir" && c3c compile-only --no-obj "$@" 2>&1)
   rc=$?
   rm -rf "$proj_dir/obj" 2>/dev/null
 else
