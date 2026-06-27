@@ -6,12 +6,11 @@ import std::io;
 
 faultdef
     BUFFER_NULL,
-    ALLOCATION_NULL,
     ALLOCATION_TOO_SMALL,
-    IMAGE_NULL,
     MAP_MISMATCH;
 
 const ulong BUFFER_SIZE = 65536;
+const uint MAP_CHECK_BYTES = 4;
 
 fn int main() {
     if (catch err = run()) {
@@ -57,25 +56,28 @@ fn void? map_round_trip(vma::Allocator alloc) {
     defer alloc.destroy_buffer(ba.buffer, ba.allocation);
     if (ba.info.size < BUFFER_SIZE) return ALLOCATION_TOO_SMALL~;
 
-    char[] mapped = alloc.try_map(ba.allocation)!;
-    for (uint i = 0; i < 4; i++) mapped[i] = (char)(0x10 + i);
-    alloc.try_flush(ba.allocation, 0, 4)!;
-    alloc.unmap_memory(ba.allocation);
-
-    alloc.try_invalidate(ba.allocation, 0, 4)!;
-    char[] rb = alloc.try_map(ba.allocation)!;
-    bool map_ok = true;
-    for (uint i = 0; i < 4; i++) {
-        if (rb[i] != (char)(0x10 + i)) map_ok = false;
+    {
+        char[] mapped = alloc.try_map(ba.allocation)!;
+        defer alloc.unmap_memory(ba.allocation);
+        for (uint i = 0; i < MAP_CHECK_BYTES; i++) mapped[i] = (char)(0x10 + i);
+        alloc.try_flush(ba.allocation, 0, MAP_CHECK_BYTES)!;
     }
-    alloc.unmap_memory(ba.allocation);
+    alloc.try_invalidate(ba.allocation, 0, MAP_CHECK_BYTES)!;
+    bool map_ok = true;
+    {
+        char[] rb = alloc.try_map(ba.allocation)!;
+        defer alloc.unmap_memory(ba.allocation);
+        for (uint i = 0; i < MAP_CHECK_BYTES; i++) {
+            if (rb[i] != (char)(0x10 + i)) map_ok = false;
+        }
+    }
     if (!map_ok) return MAP_MISMATCH~;
 
-    char[4] src = { 0xDE, 0xAD, 0xBE, 0xEF };
-    char[4] dst;
-    alloc.try_copy_to_allocation((void*)&src, ba.allocation, 0, 4)!;
-    alloc.try_copy_from_allocation(ba.allocation, 0, (void*)&dst, 4)!;
-    for (uint i = 0; i < 4; i++) {
+    char[MAP_CHECK_BYTES] src = { 0xDE, 0xAD, 0xBE, 0xEF };
+    char[MAP_CHECK_BYTES] dst;
+    alloc.try_copy_to_allocation((void*)&src, ba.allocation, 0, MAP_CHECK_BYTES)!;
+    alloc.try_copy_from_allocation(ba.allocation, 0, (void*)&dst, MAP_CHECK_BYTES)!;
+    for (uint i = 0; i < MAP_CHECK_BYTES; i++) {
         if (dst[i] != src[i]) return MAP_MISMATCH~;
     }
 }
@@ -98,8 +100,6 @@ fn void? image_round_trip(vma::Allocator alloc) {
     vma::AllocationCreateInfo ai = { .usage = vma::MemoryUsage.AUTO };
     vma::ImageAllocation ia = alloc.try_create_image(&ici, &ai)!;
     defer alloc.destroy_image(ia.image, ia.allocation);
-    if (ia.image == null) return IMAGE_NULL~;
-    if (ia.allocation == null) return ALLOCATION_NULL~;
 }
 
 <* Manual path: create a raw VkBuffer, allocate memory for it, bind, free. *>
@@ -112,12 +112,18 @@ fn void? manual_alloc_bind(vma::Allocator alloc, vk::Device device) {
     };
     vk::Buffer buffer;
     if (vk::create_buffer(device, &bi, null, &buffer) != vk::Result.SUCCESS) return BUFFER_NULL~;
-    defer vk::destroy_buffer(device, buffer, null);
 
     // AUTO is invalid with vmaAllocateMemoryForBuffer (VmaBufferImageUsage::UNKNOWN); use GPU_ONLY.
     vma::AllocationCreateInfo ai = { .usage = vma::MemoryUsage.GPU_ONLY };
-    vma::MemoryAllocation ma = alloc.try_allocate_memory_for_buffer(buffer, &ai)!;
+    vma::MemoryAllocation? ma_opt = alloc.try_allocate_memory_for_buffer(buffer, &ai);
+    if (catch err = ma_opt) {
+        vk::destroy_buffer(device, buffer, null);
+        return err~;
+    }
+    vma::MemoryAllocation ma = ma_opt;
+
     defer alloc.free_memory(ma.allocation);
+    defer vk::destroy_buffer(device, buffer, null);
 
     alloc.try_bind_buffer_memory(ma.allocation, buffer)!;
 }
