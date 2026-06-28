@@ -52,11 +52,14 @@ the two layers need distinct names. The raw externs keep the C-mapped
    caller buffer (the `try_map` precedent), and `try_build_stats_string`, which
    copies out (see #3).
 3. **`vmaBuildStatsString` → copy-out to an owned `String`.** The idiomatic
-   `try_build_stats_string` calls the raw builder, copies the VMA-owned JSON into a
-   `mem`-allocated C3 `String`, frees the VMA buffer immediately (`vmaFreeStatsString`),
-   and returns the owned copy. The caller frees it with the normal `free` — no
-   VMA-free juggling. Costs one copy. The raw `build_stats_string`/`free_stats_string`
-   pair stays reachable.
+   `stats_string` calls the raw builder, copies the VMA-owned JSON into a
+   `mem`-allocated C3 `String` (`ZString.copy(mem)`), frees the VMA buffer immediately
+   (`vmaFreeStatsString`), and returns the owned copy. The caller frees it with
+   `free(s.ptr)` — no VMA-free juggling. Costs one copy. It returns a **plain
+   `String`, not an optional**: `ZString.copy` returns a plain `String` and panics on
+   OOM like any C3 heap allocation, so there is no fault to surface — consistent with
+   the rest of the M3 statistics surface having no fault paths. The raw
+   `build_stats_string`/`free_stats_string` pair stays reachable.
 4. **bind\*2 runtime coverage via a Vulkan 1.1 device.** The headless bootstrap and
    the allocator are bumped to Vulkan 1.1 (`VK_API_1_1 = (1<<22)|(1<<12)`) so
    `vmaBindBufferMemory2`/`vmaBindImageMemory2` resolve as core entry points.
@@ -111,7 +114,7 @@ fn vk::PhysicalDeviceMemoryProperties* Allocator.memory_properties(self);
 fn vk::MemoryPropertyFlags             Allocator.memory_type_properties(self, uint type_index);
 fn TotalStatistics                     Allocator.statistics(self);
 fn Budget[]                            Allocator.heap_budgets(self, Budget[] out);
-fn String?                             Allocator.try_build_stats_string(self, bool detailed);
+fn String                              Allocator.stats_string(self, bool detailed);
 ```
 
 - `statistics()` returns the ~3KB `TotalStatistics` by value (accepted cost).
@@ -120,8 +123,8 @@ fn String?                             Allocator.try_build_stats_string(self, bo
   buffer must be at least `vk::MAX_MEMORY_HEAPS` long.
 - `physical_device_properties()`/`memory_properties()` return VMA's cached pointer
   directly (no copy — the pointer is owned by the allocator).
-- `try_build_stats_string(detailed)` is the only fault-returning member here, and
-  only because the copy-out allocation can fail.
+- `stats_string(detailed)` returns an owned `String` the caller frees with
+  `free(s.ptr)`; no fault (see decision #3). None of the accessors fault.
 
 ### Deferred items — all return `VkResult`, route through `check()`
 
@@ -160,15 +163,17 @@ allocator move to Vulkan 1.1.
    `total.statistics.allocation_bytes > 0` and `block_count > 0`; `heap_budgets(buf)`
    asserts `len > 0` and at least one heap `budget > 0`; `info()` asserts
    `device == h.device`; `memory_type_properties(0)` returns; the two property
-   getters are non-null; `try_build_stats_string(true)` asserts a non-empty string,
-   then frees it.
+   getters are non-null; `stats_string(true)` asserts a non-empty string, then
+   frees it with `free(s.ptr)`.
 2. **`manual_image_bind`** — raw `vk::create_image` → `try_allocate_memory_for_image`
    (`MemoryUsage.GPU_ONLY`) → `try_bind_image_memory2` (offset 0, null next) →
    teardown destroys the image before `free_memory`. Covers leftover (a) and the
    image bind2 path.
-3. **`manual_alloc_bind`** (modify) — switch the bind to `try_bind_buffer_memory2`;
-   add a `try_allocate_memory` path that pulls `vk::MemoryRequirements` from
-   `vk::get_buffer_memory_requirements`. Covers buffer bind2 and the raw allocate.
+3. **`manual_reqs_bind`** (new) — create a `VkBuffer`, pull `vk::MemoryRequirements`
+   from `vk::get_buffer_memory_requirements`, allocate via `try_allocate_memory`, bind
+   via `try_bind_buffer_memory2`, free. Covers the raw allocate and buffer bind2. The
+   M2 `manual_alloc_bind` (`try_allocate_memory_for_buffer` + v1 `try_bind_buffer_memory`)
+   is kept unchanged so its paths keep their runtime coverage.
 4. **`map_round_trip`** (modify) — add a single-element `try_flush_allocations`
    batch alongside the existing scalar flush. Covers the batch flush/invalidate
    variants.
