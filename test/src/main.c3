@@ -10,7 +10,9 @@ faultdef
     MAP_MISMATCH,
     IMAGE_NULL,
     STATS_EMPTY,
-    INFO_MISMATCH;
+    INFO_MISMATCH,
+    POOL_NAME_MISMATCH,
+    POOL_STATS_EMPTY;
 
 const ulong BUFFER_SIZE = 65536;
 const uint MAP_CHECK_BYTES = 4;
@@ -20,7 +22,7 @@ fn int main() {
         io::printfn("vma smoke FAILED: %s", err);
         return 1;
     }
-    io::printn("vma smoke OK: map + image + manual buffer/reqs/image + stats");
+    io::printn("vma smoke OK: map + image + manual buffer/reqs/image + stats + pool");
     return 0;
 }
 
@@ -43,6 +45,7 @@ fn void? run() {
     manual_reqs_bind(alloc, h.device)!;
     manual_image_bind(alloc, h.device)!;
     stats_round_trip(alloc, h.device)!;
+    pool_round_trip(alloc, h.device)!;
 }
 
 <* Map a host-visible buffer, write+flush+invalidate+read through the mapped
@@ -251,4 +254,37 @@ fn void? stats_round_trip(vma::Allocator alloc, vk::Device device) {
     String js = alloc.stats_string(true);
     defer free(js.ptr);
     if (js.len == 0) return STATS_EMPTY~;
+}
+
+<* Custom pool: find a memory type for a buffer, create a pool on it, name it,
+   allocate a buffer from the pool, query pool statistics, check corruption. *>
+fn void? pool_round_trip(vma::Allocator alloc, vk::Device device) {
+    vk::BufferCreateInfo bi = {
+        .s_type       = vk::StructureType.BUFFER_CREATE_INFO,
+        .size         = BUFFER_SIZE,
+        .usage        = vk::BufferUsageFlagBits.TRANSFER_DST_BIT,
+        .sharing_mode = vk::SharingMode.EXCLUSIVE,
+    };
+    vma::AllocationCreateInfo find_ai = { .usage = vma::MemoryUsage.AUTO };
+    uint mem_type = alloc.try_find_memory_type_index_for_buffer_info(&bi, &find_ai)!;
+
+    vma::PoolCreateInfo pci = { .memory_type_index = mem_type };
+    vma::Pool pool = alloc.try_create_pool(&pci)!;
+    defer alloc.destroy_pool(pool);
+
+    alloc.set_pool_name(pool, "smoke_pool");
+    if (alloc.pool_name(pool).str_view() != "smoke_pool") return POOL_NAME_MISMATCH~;
+
+    vma::AllocationCreateInfo pool_ai = { .pool = pool };
+    vma::BufferAllocation ba = alloc.try_create_buffer(&bi, &pool_ai)!;
+    defer alloc.destroy_buffer(ba.buffer, ba.allocation);
+
+    vma::Statistics ps = alloc.pool_statistics(pool);
+    if (ps.allocation_bytes == 0 || ps.block_count == 0) return POOL_STATS_EMPTY~;
+    vma::DetailedStatistics pds = alloc.pool_detailed_statistics(pool);
+    if (pds.statistics.allocation_bytes == 0) return POOL_STATS_EMPTY~;
+
+    if (catch err = alloc.try_check_pool_corruption(pool)) {
+        if (err != vma::FEATURE_NOT_PRESENT) return err~;
+    }
 }
