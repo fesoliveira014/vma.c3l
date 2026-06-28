@@ -12,5 +12,9 @@ int main(void) {
     std::printf("Budget %zu\n", sizeof(VmaBudget));
     std::printf("AllocatorInfo %zu\n", sizeof(VmaAllocatorInfo));
     std::printf("PoolCreateInfo %zu\n", sizeof(VmaPoolCreateInfo));
+    std::printf("DefragmentationInfo %zu\n", sizeof(VmaDefragmentationInfo));
+    std::printf("DefragmentationMove %zu\n", sizeof(VmaDefragmentationMove));
+    std::printf("DefragmentationPassMoveInfo %zu\n", sizeof(VmaDefragmentationPassMoveInfo));
+    std::printf("DefragmentationStats %zu\n", sizeof(VmaDefragmentationStats));
     return 0;
 }
