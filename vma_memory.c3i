@@ -39,7 +39,7 @@ struct AllocationCreateInfo {
     vk::MemoryPropertyFlags required_flags;
     vk::MemoryPropertyFlags preferred_flags;
     uint                    memory_type_bits;
-    void*                   pool;
+    Pool                    pool;
     void*                   user_data;
     float                   priority;
 }
@@ -74,3 +74,7 @@ extern fn vk::Result Allocator.copy_memory_to_allocation(self, void* src, Alloca
 extern fn vk::Result Allocator.copy_allocation_to_memory(self, Allocation allocation, vk::DeviceSize src_offset, void* dst, vk::DeviceSize size) @cname("vmaCopyAllocationToMemory");
 extern fn vk::Result Allocator.bind_buffer_memory(self, Allocation allocation, vk::Buffer buffer) @cname("vmaBindBufferMemory");
 extern fn vk::Result Allocator.bind_buffer_memory2(self, Allocation allocation, vk::DeviceSize offset, vk::Buffer buffer, void* next) @cname("vmaBindBufferMemory2");
+
+extern fn vk::Result Allocator.find_memory_type_index(self, uint memory_type_bits, AllocationCreateInfo* ci, uint* out_index) @cname("vmaFindMemoryTypeIndex");
+extern fn vk::Result Allocator.find_memory_type_index_for_buffer_info(self, vk::BufferCreateInfo* bi, AllocationCreateInfo* ci, uint* out_index) @cname("vmaFindMemoryTypeIndexForBufferInfo");
+extern fn vk::Result Allocator.find_memory_type_index_for_image_info(self, vk::ImageCreateInfo* ii, AllocationCreateInfo* ci, uint* out_index) @cname("vmaFindMemoryTypeIndexForImageInfo");

@@ -85,3 +85,21 @@ fn void? Allocator.try_invalidate_allocations(self, Allocation[] allocs, vk::Dev
     if (allocs.len == 0) return;
     check(self.invalidate_allocations((uint)allocs.len, &allocs[0], &offsets[0], &sizes[0]))!;
 }
+
+fn uint? Allocator.try_find_memory_type_index(self, uint memory_type_bits, AllocationCreateInfo* ci) {
+    uint idx;
+    check(self.find_memory_type_index(memory_type_bits, ci, &idx))!;
+    return idx;
+}
+
+fn uint? Allocator.try_find_memory_type_index_for_buffer_info(self, vk::BufferCreateInfo* bi, AllocationCreateInfo* ci) {
+    uint idx;
+    check(self.find_memory_type_index_for_buffer_info(bi, ci, &idx))!;
+    return idx;
+}
+
+fn uint? Allocator.try_find_memory_type_index_for_image_info(self, vk::ImageCreateInfo* ii, AllocationCreateInfo* ci) {
+    uint idx;
+    check(self.find_memory_type_index_for_image_info(ii, ci, &idx))!;
+    return idx;
+}
