@@ -53,11 +53,15 @@ the by-value accessors take distinct noun names (`pool_statistics`,
    `try_allocate_*` allocate from the pool.
 3. **Pool statistics reuse M3's structs.** `pool_statistics` returns `Statistics`,
    `pool_detailed_statistics` returns `DetailedStatistics`. No new stat structs.
-4. **One new granular fault, `CORRUPTION_DETECTED`**, mapping
-   `vk::Result.ERROR_VALIDATION_FAILED_EXT` in `check()`. `check_pool_corruption`
-   returns `FEATURE_NOT_PRESENT` when the lib lacks corruption detection (ours is
-   built without `VMA_DEBUG_DETECT_CORRUPTION`), `SUCCESS` when clean,
-   `CORRUPTION_DETECTED` when corruption is found.
+4. **One new granular fault, `CORRUPTION_DETECTED`**, raised by
+   `try_check_pool_corruption` when VMA reports `VK_ERROR_UNKNOWN` (VMA 3.3.0
+   surfaces detected corruption as `ERROR_UNKNOWN`, not `ERROR_VALIDATION_FAILED_EXT`
+   which the header does not use for this purpose). The mapping is handled locally in
+   `try_check_pool_corruption` — `ERROR_UNKNOWN` → `CORRUPTION_DETECTED~` — not in
+   the shared `check()`. `check_pool_corruption` returns `FEATURE_NOT_PRESENT` when
+   the lib lacks corruption detection (ours is built without
+   `VMA_DEBUG_DETECT_CORRUPTION`), `SUCCESS` when clean, `CORRUPTION_DETECTED` when
+   corruption is found.
 5. **`PoolCreateInfo` is layout-pinned** with `$assert(PoolCreateInfo::size == 56)`,
    the `N` from the size probe. `size_t` fields map to C3 `usz`.
 
@@ -139,12 +143,9 @@ existing `$assert(AllocationCreateInfo::size == 48)` is unchanged.
 
 ### `check()` extension (`vma.c3`)
 
-Add `CORRUPTION_DETECTED` to the `faultdef` block (one fault per line) and one case
-to the `check()` switch:
-
-```
-case vk::Result.ERROR_VALIDATION_FAILED_EXT: return CORRUPTION_DETECTED~;
-```
+Add `CORRUPTION_DETECTED` to the `faultdef` block (one fault per line). No new case
+is added to `check()` — the fault is raised locally in `try_check_pool_corruption`
+(see decision #4).
 
 ## Testing
 

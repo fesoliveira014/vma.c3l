@@ -25,7 +25,6 @@ fn void? check(vk::Result r) {
         case vk::Result.ERROR_FEATURE_NOT_PRESENT:     return FEATURE_NOT_PRESENT~;
         case vk::Result.ERROR_TOO_MANY_OBJECTS:        return TOO_MANY_OBJECTS~;
         case vk::Result.ERROR_INVALID_EXTERNAL_HANDLE: return INVALID_EXTERNAL_HANDLE~;
-        case vk::Result.ERROR_VALIDATION_FAILED_EXT:   return CORRUPTION_DETECTED~;
         default:                                       return UNKNOWN~;
     }
 }

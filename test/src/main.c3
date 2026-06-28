@@ -45,7 +45,7 @@ fn void? run() {
     manual_reqs_bind(alloc, h.device)!;
     manual_image_bind(alloc, h.device)!;
     stats_round_trip(alloc, h.device)!;
-    pool_round_trip(alloc, h.device)!;
+    pool_round_trip(alloc)!;
 }
 
 <* Map a host-visible buffer, write+flush+invalidate+read through the mapped
@@ -258,7 +258,7 @@ fn void? stats_round_trip(vma::Allocator alloc, vk::Device device) {
 
 <* Custom pool: find a memory type for a buffer, create a pool on it, name it,
    allocate a buffer from the pool, query pool statistics, check corruption. *>
-fn void? pool_round_trip(vma::Allocator alloc, vk::Device device) {
+fn void? pool_round_trip(vma::Allocator alloc) {
     vk::BufferCreateInfo bi = {
         .s_type       = vk::StructureType.BUFFER_CREATE_INFO,
         .size         = BUFFER_SIZE,

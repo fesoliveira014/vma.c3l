@@ -20,8 +20,16 @@ fn DetailedStatistics Allocator.pool_detailed_statistics(self, Pool pool) {
     return out_stats;
 }
 
+<* Check a pool for corruption. Requires a lib built with corruption detection;
+   otherwise returns FEATURE_NOT_PRESENT. Corruption found surfaces as
+   CORRUPTION_DETECTED (VMA reports it as VK_ERROR_UNKNOWN). *>
 fn void? Allocator.try_check_pool_corruption(self, Pool pool) {
-    check(self.check_pool_corruption(pool))!;
+    vk::Result r = self.check_pool_corruption(pool);
+    switch (r) {
+        case vk::Result.SUCCESS:       return;
+        case vk::Result.ERROR_UNKNOWN: return CORRUPTION_DETECTED~;
+        default:                       check(r)!;
+    }
 }
 
 <* Return VMA's internally-owned pool name pointer; may be null if no name was set. *>
