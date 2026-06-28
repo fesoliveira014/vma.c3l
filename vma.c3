@@ -11,6 +11,7 @@ faultdef
     TOO_MANY_OBJECTS,
     INVALID_EXTERNAL_HANDLE,
     BATCH_LENGTH_MISMATCH,
+    CORRUPTION_DETECTED,
     UNKNOWN;
 
 <* Map a VkResult to a vma fault. Returns normally on VK_SUCCESS. *>
@@ -24,6 +25,7 @@ fn void? check(vk::Result r) {
         case vk::Result.ERROR_FEATURE_NOT_PRESENT:     return FEATURE_NOT_PRESENT~;
         case vk::Result.ERROR_TOO_MANY_OBJECTS:        return TOO_MANY_OBJECTS~;
         case vk::Result.ERROR_INVALID_EXTERNAL_HANDLE: return INVALID_EXTERNAL_HANDLE~;
+        case vk::Result.ERROR_VALIDATION_FAILED_EXT:   return CORRUPTION_DETECTED~;
         default:                                       return UNKNOWN~;
     }
 }
