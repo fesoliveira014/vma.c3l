@@ -118,7 +118,9 @@ fn void? image_round_trip(vma::Allocator alloc) {
 }
 
 <* Manual buffer path: create a raw VkBuffer, allocate memory for it via
-   try_allocate_memory_for_buffer, bind via bind_buffer_memory (v1), free. *>
+   try_allocate_memory_for_buffer, bind via bind_buffer_memory (v1), free.
+   Uses GPU_ONLY: AUTO* usage is invalid for vmaAllocateMemoryForBuffer
+   (no buffer-usage context — VMA hard-asserts). *>
 fn void? manual_alloc_bind(vma::Allocator alloc, vk::Device device) {
     vk::BufferCreateInfo bi = {
         .s_type       = vk::StructureType.BUFFER_CREATE_INFO,
@@ -144,7 +146,9 @@ fn void? manual_alloc_bind(vma::Allocator alloc, vk::Device device) {
 }
 
 <* Raw-requirements path: create a VkBuffer, query its memory requirements,
-   allocate via try_allocate_memory, bind via bind_buffer_memory2, free. *>
+   allocate via try_allocate_memory, bind via bind_buffer_memory2, free.
+   Uses GPU_ONLY: AUTO* usage is invalid for vmaAllocateMemory from raw
+   requirements (no buffer/image-usage context — VMA hard-asserts). *>
 fn void? manual_reqs_bind(vma::Allocator alloc, vk::Device device) {
     vk::BufferCreateInfo bi = {
         .s_type       = vk::StructureType.BUFFER_CREATE_INFO,
