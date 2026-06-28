@@ -12,17 +12,21 @@ faultdef
     STATS_EMPTY,
     INFO_MISMATCH,
     POOL_NAME_MISMATCH,
-    POOL_STATS_EMPTY;
+    POOL_STATS_EMPTY,
+    DEFRAG_RUNAWAY;
 
 const ulong BUFFER_SIZE = 65536;
 const uint MAP_CHECK_BYTES = 4;
+const ulong DEFRAG_BLOCK_SIZE = 131072;
+const uint DEFRAG_BUFFERS = 16;
+const uint MAX_DEFRAG_PASSES = 64;
 
 fn int main() {
     if (catch err = run()) {
         io::printfn("vma smoke FAILED: %s", err);
         return 1;
     }
-    io::printn("vma smoke OK: map + image + manual buffer/reqs/image + stats + pool");
+    io::printn("vma smoke OK: map + image + manual buffer/reqs/image + stats + pool + defrag");
     return 0;
 }
 
@@ -46,6 +50,7 @@ fn void? run() {
     manual_image_bind(alloc, h.device)!;
     stats_round_trip(alloc, h.device)!;
     pool_round_trip(alloc)!;
+    defrag_round_trip(alloc)!;
 }
 
 <* Map a host-visible buffer, write+flush+invalidate+read through the mapped
@@ -286,5 +291,60 @@ fn void? pool_round_trip(vma::Allocator alloc) {
 
     if (catch err = alloc.try_check_pool_corruption(pool)) {
         if (err != vma::FEATURE_NOT_PRESENT) return err~;
+    }
+}
+
+<* Fragment a small-block custom pool, then drive the full defragmentation
+   begin->pass-loop->end lifecycle with operation=IGNORE (no GPU copy needed).
+   Move count is best-effort (lavapipe-dependent); the loop handles zero moves. *>
+fn void? defrag_round_trip(vma::Allocator alloc) {
+    vk::BufferCreateInfo bi = {
+        .s_type       = vk::StructureType.BUFFER_CREATE_INFO,
+        .size         = BUFFER_SIZE,
+        .usage        = vk::BufferUsageFlagBits.TRANSFER_SRC_BIT | vk::BufferUsageFlagBits.TRANSFER_DST_BIT,
+        .sharing_mode = vk::SharingMode.EXCLUSIVE,
+    };
+    vma::AllocationCreateInfo find_ai = { .usage = vma::MemoryUsage.AUTO };
+    uint mem_type = alloc.try_find_memory_type_index_for_buffer_info(&bi, &find_ai)!;
+
+    vma::PoolCreateInfo pci = { .memory_type_index = mem_type, .block_size = DEFRAG_BLOCK_SIZE };
+    vma::Pool pool = alloc.try_create_pool(&pci)!;
+    defer alloc.destroy_pool(pool);
+
+    vma::BufferAllocation[DEFRAG_BUFFERS] bufs;
+    bool[DEFRAG_BUFFERS] live;
+    defer {
+        for (uint i = 0; i < DEFRAG_BUFFERS; i++) {
+            if (live[i]) alloc.destroy_buffer(bufs[i].buffer, bufs[i].allocation);
+        }
+    }
+
+    vma::AllocationCreateInfo pool_ai = { .pool = pool };
+    for (uint i = 0; i < DEFRAG_BUFFERS; i++) {
+        bufs[i] = alloc.try_create_buffer(&bi, &pool_ai)!;
+        live[i] = true;
+    }
+    for (uint i = 0; i < DEFRAG_BUFFERS; i += 2) {
+        alloc.destroy_buffer(bufs[i].buffer, bufs[i].allocation);
+        live[i] = false;
+    }
+
+    vma::DefragmentationInfo info = {
+        .flags = { .algorithm_balanced = true },
+        .pool  = pool,
+    };
+    vma::DefragmentationContext ctx = alloc.try_begin_defragmentation(&info)!;
+    vma::DefragmentationStats stats;
+    defer alloc.end_defragmentation(ctx, &stats);
+
+    vma::DefragmentationPassMoveInfo pass;
+    uint passes = 0;
+    while (alloc.try_begin_defragmentation_pass(ctx, &pass)!) {
+        foreach (&m : pass.moves[:pass.move_count]) {
+            m.operation = vma::DefragmentationMoveOperation.IGNORE;
+        }
+        passes++;
+        if (passes > MAX_DEFRAG_PASSES) return DEFRAG_RUNAWAY~;
+        if (!alloc.try_end_defragmentation_pass(ctx, &pass)!) break;
     }
 }
