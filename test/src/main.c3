@@ -7,7 +7,10 @@ import std::io;
 faultdef
     BUFFER_NULL,
     ALLOCATION_TOO_SMALL,
-    MAP_MISMATCH;
+    MAP_MISMATCH,
+    IMAGE_NULL,
+    STATS_EMPTY,
+    INFO_MISMATCH;
 
 const ulong BUFFER_SIZE = 65536;
 const uint MAP_CHECK_BYTES = 4;
@@ -17,7 +20,7 @@ fn int main() {
         io::printfn("vma smoke FAILED: %s", err);
         return 1;
     }
-    io::printn("vma smoke OK: buffer + map + image + manual alloc/bind");
+    io::printn("vma smoke OK: map + image + manual buffer/reqs/image + stats");
     return 0;
 }
 
@@ -29,7 +32,7 @@ fn void? run() {
         .physical_device    = h.physical_device,
         .device             = h.device,
         .instance           = h.instance,
-        .vulkan_api_version = VK_API_1_0,
+        .vulkan_api_version = VK_API_1_1,
     };
     vma::Allocator alloc = vma::try_create_allocator(&info)!;
     defer alloc.destroy();
@@ -37,10 +40,14 @@ fn void? run() {
     map_round_trip(alloc)!;
     image_round_trip(alloc)!;
     manual_alloc_bind(alloc, h.device)!;
+    manual_reqs_bind(alloc, h.device)!;
+    manual_image_bind(alloc, h.device)!;
+    stats_round_trip(alloc, h.device)!;
 }
 
 <* Map a host-visible buffer, write+flush+invalidate+read through the mapped
-   slice, then exercise copy-to/from-allocation; assert the bytes survive. *>
+   slice, then exercise copy-to/from-allocation; assert the bytes survive.
+   Also exercises the batch flush/invalidate variants over a one-element set. *>
 fn void? map_round_trip(vma::Allocator alloc) {
     vk::BufferCreateInfo bi = {
         .s_type       = vk::StructureType.BUFFER_CREATE_INFO,
@@ -62,7 +69,15 @@ fn void? map_round_trip(vma::Allocator alloc) {
         for (uint i = 0; i < MAP_CHECK_BYTES; i++) mapped[i] = (char)(0x10 + i);
         alloc.try_flush(ba.allocation, 0, MAP_CHECK_BYTES)!;
     }
+
+    vma::Allocation[1] batch_allocs  = { ba.allocation };
+    vk::DeviceSize[1]  batch_offsets = { 0 };
+    vk::DeviceSize[1]  batch_sizes   = { MAP_CHECK_BYTES };
+    alloc.try_flush_allocations(&batch_allocs, &batch_offsets, &batch_sizes)!;
+
     alloc.try_invalidate(ba.allocation, 0, MAP_CHECK_BYTES)!;
+    alloc.try_invalidate_allocations(&batch_allocs, &batch_offsets, &batch_sizes)!;
+
     bool map_ok = true;
     {
         char[] rb = alloc.try_map(ba.allocation)!;
@@ -82,7 +97,7 @@ fn void? map_round_trip(vma::Allocator alloc) {
     }
 }
 
-<* Allocate a small 2D image with its backing memory, assert the handles, free. *>
+<* Allocate a small 2D image with its backing memory via try_create_image, free. *>
 fn void? image_round_trip(vma::Allocator alloc) {
     vk::ImageCreateInfo ici = {
         .s_type         = vk::StructureType.IMAGE_CREATE_INFO,
@@ -102,7 +117,8 @@ fn void? image_round_trip(vma::Allocator alloc) {
     defer alloc.destroy_image(ia.image, ia.allocation);
 }
 
-<* Manual path: create a raw VkBuffer, allocate memory for it, bind, free. *>
+<* Manual buffer path: create a raw VkBuffer, allocate memory for it via
+   try_allocate_memory_for_buffer, bind via bind_buffer_memory (v1), free. *>
 fn void? manual_alloc_bind(vma::Allocator alloc, vk::Device device) {
     vk::BufferCreateInfo bi = {
         .s_type       = vk::StructureType.BUFFER_CREATE_INFO,
@@ -113,7 +129,6 @@ fn void? manual_alloc_bind(vma::Allocator alloc, vk::Device device) {
     vk::Buffer buffer;
     if (vk::create_buffer(device, &bi, null, &buffer) != vk::Result.SUCCESS) return BUFFER_NULL~;
 
-    // AUTO is invalid with vmaAllocateMemoryForBuffer (VmaBufferImageUsage::UNKNOWN); use GPU_ONLY.
     vma::AllocationCreateInfo ai = { .usage = vma::MemoryUsage.GPU_ONLY };
     vma::MemoryAllocation? ma_opt = alloc.try_allocate_memory_for_buffer(buffer, &ai);
     if (catch err = ma_opt) {
@@ -126,4 +141,110 @@ fn void? manual_alloc_bind(vma::Allocator alloc, vk::Device device) {
     defer vk::destroy_buffer(device, buffer, null);
 
     alloc.try_bind_buffer_memory(ma.allocation, buffer)!;
+}
+
+<* Raw-requirements path: create a VkBuffer, query its memory requirements,
+   allocate via try_allocate_memory, bind via bind_buffer_memory2, free. *>
+fn void? manual_reqs_bind(vma::Allocator alloc, vk::Device device) {
+    vk::BufferCreateInfo bi = {
+        .s_type       = vk::StructureType.BUFFER_CREATE_INFO,
+        .size         = BUFFER_SIZE,
+        .usage        = vk::BufferUsageFlagBits.TRANSFER_SRC_BIT,
+        .sharing_mode = vk::SharingMode.EXCLUSIVE,
+    };
+    vk::Buffer buffer;
+    if (vk::create_buffer(device, &bi, null, &buffer) != vk::Result.SUCCESS) return BUFFER_NULL~;
+
+    vk::MemoryRequirements reqs;
+    vk::get_buffer_memory_requirements(device, buffer, &reqs);
+
+    vma::AllocationCreateInfo ai = { .usage = vma::MemoryUsage.GPU_ONLY };
+    vma::MemoryAllocation? ma_opt = alloc.try_allocate_memory(&reqs, &ai);
+    if (catch err = ma_opt) {
+        vk::destroy_buffer(device, buffer, null);
+        return err~;
+    }
+    vma::MemoryAllocation ma = ma_opt;
+
+    defer alloc.free_memory(ma.allocation);
+    defer vk::destroy_buffer(device, buffer, null);
+
+    alloc.try_bind_buffer_memory2(ma.allocation, 0, buffer, null)!;
+}
+
+<* Manual image path: create a raw VkImage, allocate memory for it via
+   try_allocate_memory_for_image, bind via bind_image_memory2, free. *>
+fn void? manual_image_bind(vma::Allocator alloc, vk::Device device) {
+    vk::ImageCreateInfo ici = {
+        .s_type         = vk::StructureType.IMAGE_CREATE_INFO,
+        .image_type     = vk::ImageType.TYPE_2D,
+        .format         = vk::Format.R8G8B8A8_UNORM,
+        .extent         = { .width = 64, .height = 64, .depth = 1 },
+        .mip_levels     = 1,
+        .array_layers   = 1,
+        .samples        = vk::SampleCountFlagBits.COUNT_1_BIT,
+        .tiling         = vk::ImageTiling.OPTIMAL,
+        .usage          = vk::ImageUsageFlagBits.SAMPLED_BIT | vk::ImageUsageFlagBits.TRANSFER_DST_BIT,
+        .sharing_mode   = vk::SharingMode.EXCLUSIVE,
+        .initial_layout = vk::ImageLayout.UNDEFINED,
+    };
+    vk::Image image;
+    if (vk::create_image(device, &ici, null, &image) != vk::Result.SUCCESS) return IMAGE_NULL~;
+
+    vma::AllocationCreateInfo ai = { .usage = vma::MemoryUsage.GPU_ONLY };
+    vma::MemoryAllocation? ma_opt = alloc.try_allocate_memory_for_image(image, &ai);
+    if (catch err = ma_opt) {
+        vk::destroy_image(device, image, null);
+        return err~;
+    }
+    vma::MemoryAllocation ma = ma_opt;
+
+    defer alloc.free_memory(ma.allocation);
+    defer vk::destroy_image(device, image, null);
+
+    alloc.try_bind_image_memory2(ma.allocation, 0, image, null)!;
+}
+
+<* With a live allocation present, query statistics, heap budgets, allocator
+   info, properties, and the JSON stats string; assert they are populated. *>
+fn void? stats_round_trip(vma::Allocator alloc, vk::Device device) {
+    vk::BufferCreateInfo bi = {
+        .s_type       = vk::StructureType.BUFFER_CREATE_INFO,
+        .size         = BUFFER_SIZE,
+        .usage        = vk::BufferUsageFlagBits.TRANSFER_DST_BIT,
+        .sharing_mode = vk::SharingMode.EXCLUSIVE,
+    };
+    vma::AllocationCreateInfo ai = { .usage = vma::MemoryUsage.AUTO };
+    vma::BufferAllocation ba = alloc.try_create_buffer(&bi, &ai)!;
+    defer alloc.destroy_buffer(ba.buffer, ba.allocation);
+
+    vma::TotalStatistics stats = alloc.statistics();
+    if (stats.total.statistics.allocation_bytes == 0) return STATS_EMPTY~;
+    if (stats.total.statistics.block_count == 0) return STATS_EMPTY~;
+
+    vma::Budget[vk::MAX_MEMORY_HEAPS] budget_buf;
+    vma::Budget[] budgets = alloc.heap_budgets(&budget_buf);
+    if (budgets.len == 0) return STATS_EMPTY~;
+    bool any_budget = false;
+    foreach (b : budgets) {
+        if (b.budget > 0) any_budget = true;
+    }
+    if (!any_budget) return STATS_EMPTY~;
+
+    vma::AllocatorInfo ainfo = alloc.info();
+    if (ainfo.device != device) return INFO_MISMATCH~;
+
+    if (alloc.physical_device_properties() == null) return STATS_EMPTY~;
+    vk::PhysicalDeviceMemoryProperties* mp = alloc.memory_properties();
+    if (mp == null) return STATS_EMPTY~;
+
+    uint combined = 0;
+    for (uint i = 0; i < mp.memory_type_count; i++) {
+        combined |= (uint)alloc.memory_type_properties(i);
+    }
+    if (combined == 0) return STATS_EMPTY~;
+
+    String js = alloc.stats_string(true);
+    defer free(js.ptr);
+    if (js.len == 0) return STATS_EMPTY~;
 }

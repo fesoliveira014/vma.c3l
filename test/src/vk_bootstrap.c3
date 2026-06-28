@@ -7,6 +7,7 @@ faultdef
     NO_USABLE_DEVICE;
 
 const uint VK_API_1_0 = 1 << 22;
+const uint VK_API_1_1 = (1 << 22) | (1 << 12);
 
 struct HeadlessVk {
     vk::Instance       instance;
@@ -22,7 +23,7 @@ fn HeadlessVk? create_headless_vk() {
 
     vk::ApplicationInfo app = {
         .s_type      = vk::StructureType.APPLICATION_INFO,
-        .api_version = VK_API_1_0,
+        .api_version = VK_API_1_1,
     };
     vk::InstanceCreateInfo ici = {
         .s_type             = vk::StructureType.INSTANCE_CREATE_INFO,
