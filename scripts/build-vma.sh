@@ -31,4 +31,5 @@ expect_size DetailedStatistics 64
 expect_size TotalStatistics 3136
 expect_size Budget 40
 expect_size AllocatorInfo 24
+expect_size PoolCreateInfo 56
 echo "Done."

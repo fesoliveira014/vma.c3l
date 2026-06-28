@@ -1,0 +1,30 @@
+module vma;
+
+import vk;
+
+typedef Pool = inline void*;
+
+bitstruct PoolCreateFlags : uint {
+    bool ignore_buffer_image_granularity : 1;
+    bool linear_algorithm                : 2;
+}
+
+struct PoolCreateInfo {
+    uint            memory_type_index;
+    PoolCreateFlags flags;
+    vk::DeviceSize  block_size;
+    usz             min_block_count;
+    usz             max_block_count;
+    float           priority;
+    vk::DeviceSize  min_allocation_alignment;
+    void*           memory_allocate_next;
+}
+$assert(PoolCreateInfo::size == 56);
+
+extern fn vk::Result Allocator.create_pool(self, PoolCreateInfo* ci, Pool* out_pool) @cname("vmaCreatePool");
+extern fn void Allocator.destroy_pool(self, Pool pool) @cname("vmaDestroyPool");
+extern fn void Allocator.get_pool_statistics(self, Pool pool, Statistics* out_stats) @cname("vmaGetPoolStatistics");
+extern fn void Allocator.calculate_pool_statistics(self, Pool pool, DetailedStatistics* out_stats) @cname("vmaCalculatePoolStatistics");
+extern fn vk::Result Allocator.check_pool_corruption(self, Pool pool) @cname("vmaCheckPoolCorruption");
+extern fn void Allocator.get_pool_name(self, Pool pool, ZString* out_name) @cname("vmaGetPoolName");
+extern fn void Allocator.set_pool_name(self, Pool pool, ZString name) @cname("vmaSetPoolName");

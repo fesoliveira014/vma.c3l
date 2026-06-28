@@ -11,5 +11,6 @@ int main(void) {
     std::printf("TotalStatistics %zu\n", sizeof(VmaTotalStatistics));
     std::printf("Budget %zu\n", sizeof(VmaBudget));
     std::printf("AllocatorInfo %zu\n", sizeof(VmaAllocatorInfo));
+    std::printf("PoolCreateInfo %zu\n", sizeof(VmaPoolCreateInfo));
     return 0;
 }
