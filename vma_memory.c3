@@ -59,3 +59,27 @@ fn MemoryAllocation? Allocator.try_allocate_memory_for_buffer(self, vk::Buffer b
 fn void? Allocator.try_bind_buffer_memory(self, Allocation allocation, vk::Buffer buffer) {
     check(self.bind_buffer_memory(allocation, buffer))!;
 }
+
+<* Allocate memory satisfying raw VkMemoryRequirements (does not bind it; call a
+   bind wrapper after). Free with `free_memory`. *>
+fn MemoryAllocation? Allocator.try_allocate_memory(self, vk::MemoryRequirements* reqs, AllocationCreateInfo* ci) {
+    MemoryAllocation ma;
+    check(self.allocate_memory(reqs, ci, &ma.allocation, &ma.info))!;
+    return ma;
+}
+
+fn void? Allocator.try_bind_buffer_memory2(self, Allocation allocation, vk::DeviceSize offset, vk::Buffer buffer, void* next) {
+    check(self.bind_buffer_memory2(allocation, offset, buffer, next))!;
+}
+
+<* Flush a batch of allocations. The three slices must be equal length. *>
+fn void? Allocator.try_flush_allocations(self, Allocation[] allocs, vk::DeviceSize[] offsets, vk::DeviceSize[] sizes) {
+    if (allocs.len != offsets.len || allocs.len != sizes.len) return BATCH_LENGTH_MISMATCH~;
+    check(self.flush_allocations((uint)allocs.len, &allocs[0], &offsets[0], &sizes[0]))!;
+}
+
+<* Invalidate a batch of allocations. The three slices must be equal length. *>
+fn void? Allocator.try_invalidate_allocations(self, Allocation[] allocs, vk::DeviceSize[] offsets, vk::DeviceSize[] sizes) {
+    if (allocs.len != offsets.len || allocs.len != sizes.len) return BATCH_LENGTH_MISMATCH~;
+    check(self.invalidate_allocations((uint)allocs.len, &allocs[0], &offsets[0], &sizes[0]))!;
+}

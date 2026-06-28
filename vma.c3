@@ -10,6 +10,7 @@ faultdef
     FEATURE_NOT_PRESENT,
     TOO_MANY_OBJECTS,
     INVALID_EXTERNAL_HANDLE,
+    BATCH_LENGTH_MISMATCH,
     UNKNOWN;
 
 <* Map a VkResult to a vma fault. Returns normally on VK_SUCCESS. *>
