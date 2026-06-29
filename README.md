@@ -157,4 +157,5 @@ the test dependencies.
 
 ## License
 
-See [`LICENSE`](LICENSE).
+Released under the MIT License — see [`LICENSE`](LICENSE). The wrapped VMA library
+is itself MIT-licensed.
