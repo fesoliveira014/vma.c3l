@@ -7,11 +7,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 C3 language bindings for the Vulkan Memory Allocator (VMA) C library, packaged as a C3 **library** (`.c3l`), not a standalone program.
 
 - `manifest.json` — library manifest; `provides` the `vma` module, `linklib-dir` is `linked-libs`. (The package directory is `c3vma.c3l`, but C3 resolves a dependency by its `provides` name, so the module — and the consumer's dependency entry — is `vma`, not `c3vma`.)
-- `vma.c3i` — binding declarations (`module vma`). Currently a stub.
-- `linked-libs/<target>/` — per-platform compiled VMA libs (16 targets, currently empty).
-- `test/` — a standalone consumer project used only to exercise the bindings locally (SDL3 window provider + `vk` Vulkan loader). It is **not** part of the shipped library: `manifest.json` never references it, so consumers of `vma` never pull `sdl3`/`vk`. See `test/README.md`.
+- `vma.c3i` — types + raw `extern` declarations (`module vma`). `vma.c3` — idiomatic wrappers. `vma_check.c3` — the `VkResult`→fault mapping (`faultdef` + `check`). The whole VMA `extern "C"` surface is bound (except `vmaGetMemoryWin32Handle` and `vmaImportVulkanFunctionsFromVolk`, which the lib build omits).
+- `linked-libs/<target>/` — per-target compiled VMA libs. `linux-x64` is built; `windows-x64` is produced by the CI workflow (`.github/workflows/build-vma-libs.yml`); the other targets are not yet populated.
+- `test/` — a standalone headless consumer project that exercises the bindings against a software Vulkan ICD (lavapipe); its only deps are `vma` and `vk`. It is **not** part of the shipped library: `manifest.json` never references it, so consumers of `vma` never pull the test deps. See `test/README.md`.
 
-The library package itself has no `project.json` and no standalone build — it is consumed by another project that lists `vma` under its `dependencies` and runs `c3c build`. Do not assume the build/test commands in `docs/style.md` (`c3c build linux`, `c3c test linux`) run in *this* repo; they describe the consuming project. To syntax-check a binding file in isolation, use `c3c compile-only --no-obj <file>`. To compile-check the binding *in use* against the test deps, run from `test/`: `c3c compile-only src/main.c3 --libdir libs --lib vma --lib sdl3 --lib vk --target linux-x64`.
+The library package itself has no `project.json` and no standalone build — it is consumed by another project that lists `vma` under its `dependencies` and runs `c3c build`. Do not assume the build/test commands in `docs/style.md` (`c3c build linux`, `c3c test linux`) run in *this* repo; they describe the consuming project. To syntax-check a binding file in isolation, use `c3c compile-only --no-obj <file>`. To compile-check the binding *in use* against the test deps, run from `test/`: `c3c compile-only src/main.c3 --libdir libs --lib vma --lib vk --target linux-x64`.
 
 ## Authoring rules — read before writing any C3
 

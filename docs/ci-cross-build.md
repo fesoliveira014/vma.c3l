@@ -29,7 +29,7 @@ workflow can refresh it (download the linux artifact and replace the committed `
 
 ## Binding surface
 
-As of M7 the full VMA `extern "C"` surface is bound, except two functions absent from
+The full VMA `extern "C"` surface is bound, except two functions absent from
 the build (`vmaGetMemoryWin32Handle` — needs `VMA_EXTERNAL_MEMORY_WIN32`; and
 `vmaImportVulkanFunctionsFromVolk` — volk integration). The other 13 manifest targets
 beyond linux-x64/windows-x64 are not yet populated.
