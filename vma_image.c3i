@@ -1,9 +1,0 @@
-module vma;
-
-import vk;
-
-extern fn vk::Result Allocator.create_image(self, vk::ImageCreateInfo* image_info, AllocationCreateInfo* alloc_info, vk::Image* out_image, Allocation* out_allocation, AllocationInfo* out_info) @cname("vmaCreateImage");
-extern fn void Allocator.destroy_image(self, vk::Image image, Allocation allocation) @cname("vmaDestroyImage");
-extern fn vk::Result Allocator.bind_image_memory(self, Allocation allocation, vk::Image image) @cname("vmaBindImageMemory");
-extern fn vk::Result Allocator.bind_image_memory2(self, Allocation allocation, vk::DeviceSize offset, vk::Image image, void* next) @cname("vmaBindImageMemory2");
-extern fn vk::Result Allocator.allocate_memory_for_image(self, vk::Image image, AllocationCreateInfo* ci, Allocation* out_alloc, AllocationInfo* out_info) @cname("vmaAllocateMemoryForImage");

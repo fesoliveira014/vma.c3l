@@ -2,7 +2,33 @@ module vma;
 
 import vk;
 
-typedef Allocator = inline void*;
+typedef Allocator             = inline void*;
+typedef Allocation            = inline void*;
+typedef Pool                  = inline void*;
+typedef DefragmentationContext = inline void*;
+typedef VirtualBlock          = inline void*;
+typedef VirtualAllocation     = inline void*;
+
+alias CheckDefragmentationBreakFunc = fn vk::Bool32(void* user_data);
+
+enum MemoryUsage : int {
+    UNKNOWN,
+    GPU_ONLY,
+    CPU_ONLY,
+    CPU_TO_GPU,
+    GPU_TO_CPU,
+    CPU_COPY,
+    GPU_LAZILY_ALLOCATED,
+    AUTO,
+    AUTO_PREFER_DEVICE,
+    AUTO_PREFER_HOST,
+}
+
+enum DefragmentationMoveOperation : int {
+    COPY,
+    IGNORE,
+    DESTROY,
+}
 
 bitstruct AllocatorCreateFlags : uint {
     bool externally_synchronized    : 0;
@@ -15,6 +41,45 @@ bitstruct AllocatorCreateFlags : uint {
     bool khr_maintenance4           : 7;
     bool khr_maintenance5           : 8;
     bool khr_external_memory_win32  : 9;
+}
+
+bitstruct AllocationCreateFlags : uint {
+    bool dedicated_memory                   : 0;
+    bool never_allocate                     : 1;
+    bool mapped                             : 2;
+    bool user_data_copy_string              : 5;
+    bool upper_address                      : 6;
+    bool dont_bind                          : 7;
+    bool within_budget                      : 8;
+    bool can_alias                          : 9;
+    bool host_access_sequential_write       : 10;
+    bool host_access_random                 : 11;
+    bool host_access_allow_transfer_instead : 12;
+    bool strategy_min_memory                : 16;
+    bool strategy_min_time                  : 17;
+}
+
+bitstruct PoolCreateFlags : uint {
+    bool ignore_buffer_image_granularity : 1;
+    bool linear_algorithm                : 2;
+}
+
+bitstruct DefragmentationFlags : uint {
+    bool algorithm_fast      : 0;
+    bool algorithm_balanced  : 1;
+    bool algorithm_full      : 2;
+    bool algorithm_extensive : 3;
+}
+
+bitstruct VirtualBlockCreateFlags : uint {
+    bool linear_algorithm : 0;
+}
+
+bitstruct VirtualAllocationCreateFlags : uint {
+    bool upper_address       : 6;
+    bool strategy_min_memory : 16;
+    bool strategy_min_time   : 17;
+    bool strategy_min_offset : 18;
 }
 
 struct AllocatorCreateInfo {
@@ -32,5 +97,216 @@ struct AllocatorCreateInfo {
 // 80 assumes VMA_EXTERNAL_MEMORY=0 (as built by scripts/build-vma.sh); both must change together.
 $assert(AllocatorCreateInfo::size == 80);
 
-extern fn vk::Result create_allocator(AllocatorCreateInfo* info, Allocator* out) @cname("vmaCreateAllocator");
+struct AllocationCreateInfo {
+    AllocationCreateFlags   flags;
+    MemoryUsage             usage;
+    vk::MemoryPropertyFlags required_flags;
+    vk::MemoryPropertyFlags preferred_flags;
+    uint                    memory_type_bits;
+    Pool                    pool;
+    void*                   user_data;
+    float                   priority;
+}
+// 48 assumes the lib was built with VMA_EXTERNAL_MEMORY=0 (scripts/build-vma.sh).
+$assert(AllocationCreateInfo::size == 48);
+
+struct AllocationInfo {
+    uint             memory_type;
+    vk::DeviceMemory device_memory;
+    vk::DeviceSize   offset;
+    vk::DeviceSize   size;
+    void*            mapped_data;
+    void*            user_data;
+    ZString          name;
+}
+$assert(AllocationInfo::size == 56);
+
+struct AllocationInfo2 {
+    AllocationInfo allocation_info;
+    vk::DeviceSize block_size;
+    vk::Bool32     dedicated_memory;
+}
+$assert(AllocationInfo2::size == 72);
+
+struct Statistics {
+    uint           block_count;
+    uint           allocation_count;
+    vk::DeviceSize block_bytes;
+    vk::DeviceSize allocation_bytes;
+}
+$assert(Statistics::size == 24);
+
+struct DetailedStatistics {
+    Statistics     statistics;
+    uint           unused_range_count;
+    vk::DeviceSize allocation_size_min;
+    vk::DeviceSize allocation_size_max;
+    vk::DeviceSize unused_range_size_min;
+    vk::DeviceSize unused_range_size_max;
+}
+$assert(DetailedStatistics::size == 64);
+
+struct TotalStatistics {
+    DetailedStatistics[vk::MAX_MEMORY_TYPES] memory_type;
+    DetailedStatistics[vk::MAX_MEMORY_HEAPS] memory_heap;
+    DetailedStatistics                       total;
+}
+$assert(TotalStatistics::size == 3136);
+
+struct Budget {
+    Statistics     statistics;
+    vk::DeviceSize usage;
+    vk::DeviceSize budget;
+}
+$assert(Budget::size == 40);
+
+struct AllocatorInfo {
+    vk::Instance       instance;
+    vk::PhysicalDevice physical_device;
+    vk::Device         device;
+}
+$assert(AllocatorInfo::size == 24);
+
+struct PoolCreateInfo {
+    uint            memory_type_index;
+    PoolCreateFlags flags;
+    vk::DeviceSize  block_size;
+    usz             min_block_count;
+    usz             max_block_count;
+    float           priority;
+    vk::DeviceSize  min_allocation_alignment;
+    void*           memory_allocate_next;
+}
+$assert(PoolCreateInfo::size == 56);
+
+struct DefragmentationInfo {
+    DefragmentationFlags          flags;
+    Pool                          pool;
+    vk::DeviceSize                max_bytes_per_pass;
+    uint                          max_allocations_per_pass;
+    CheckDefragmentationBreakFunc pfn_break_callback;
+    void*                         break_callback_user_data;
+}
+$assert(DefragmentationInfo::size == 48);
+
+struct DefragmentationMove {
+    DefragmentationMoveOperation operation;
+    Allocation                   src_allocation;
+    Allocation                   dst_tmp_allocation;
+}
+$assert(DefragmentationMove::size == 24);
+
+struct DefragmentationPassMoveInfo {
+    uint                 move_count;
+    DefragmentationMove* moves;
+}
+$assert(DefragmentationPassMoveInfo::size == 16);
+
+struct DefragmentationStats {
+    vk::DeviceSize bytes_moved;
+    vk::DeviceSize bytes_freed;
+    uint           allocations_moved;
+    uint           device_memory_blocks_freed;
+}
+$assert(DefragmentationStats::size == 24);
+
+struct VirtualBlockCreateInfo {
+    vk::DeviceSize           size;
+    VirtualBlockCreateFlags  flags;
+    vk::AllocationCallbacks* allocation_callbacks;
+}
+$assert(VirtualBlockCreateInfo::size == 24);
+
+struct VirtualAllocationCreateInfo {
+    vk::DeviceSize               size;
+    vk::DeviceSize               alignment;
+    VirtualAllocationCreateFlags flags;
+    void*                        user_data;
+}
+$assert(VirtualAllocationCreateInfo::size == 32);
+
+struct VirtualAllocationInfo {
+    vk::DeviceSize offset;
+    vk::DeviceSize size;
+    void*          user_data;
+}
+$assert(VirtualAllocationInfo::size == 24);
+
 extern fn void Allocator.destroy(self) @cname("vmaDestroyAllocator");
+
+extern fn vk::Result Allocator.create_buffer(self, vk::BufferCreateInfo* buffer_info, AllocationCreateInfo* alloc_info, vk::Buffer* out_buffer, Allocation* out_allocation, AllocationInfo* out_info) @cname("vmaCreateBuffer");
+extern fn void Allocator.destroy_buffer(self, vk::Buffer buffer, Allocation allocation) @cname("vmaDestroyBuffer");
+extern fn void Allocator.get_allocation_info(self, Allocation allocation, AllocationInfo* out_info) @cname("vmaGetAllocationInfo");
+extern fn vk::Result Allocator.allocate_memory(self, vk::MemoryRequirements* reqs, AllocationCreateInfo* ci, Allocation* out_alloc, AllocationInfo* out_info) @cname("vmaAllocateMemory");
+extern fn vk::Result Allocator.allocate_memory_for_buffer(self, vk::Buffer buffer, AllocationCreateInfo* ci, Allocation* out_alloc, AllocationInfo* out_info) @cname("vmaAllocateMemoryForBuffer");
+extern fn void Allocator.free_memory(self, Allocation allocation) @cname("vmaFreeMemory");
+extern fn vk::Result Allocator.map_memory(self, Allocation allocation, void** pp_data) @cname("vmaMapMemory");
+extern fn void Allocator.unmap_memory(self, Allocation allocation) @cname("vmaUnmapMemory");
+extern fn vk::Result Allocator.flush_allocation(self, Allocation allocation, vk::DeviceSize offset, vk::DeviceSize size) @cname("vmaFlushAllocation");
+extern fn vk::Result Allocator.invalidate_allocation(self, Allocation allocation, vk::DeviceSize offset, vk::DeviceSize size) @cname("vmaInvalidateAllocation");
+extern fn vk::Result Allocator.flush_allocations(self, uint count, Allocation* allocations, vk::DeviceSize* offsets, vk::DeviceSize* sizes) @cname("vmaFlushAllocations");
+extern fn vk::Result Allocator.invalidate_allocations(self, uint count, Allocation* allocations, vk::DeviceSize* offsets, vk::DeviceSize* sizes) @cname("vmaInvalidateAllocations");
+extern fn vk::Result Allocator.copy_memory_to_allocation(self, void* src, Allocation allocation, vk::DeviceSize dst_offset, vk::DeviceSize size) @cname("vmaCopyMemoryToAllocation");
+extern fn vk::Result Allocator.copy_allocation_to_memory(self, Allocation allocation, vk::DeviceSize src_offset, void* dst, vk::DeviceSize size) @cname("vmaCopyAllocationToMemory");
+extern fn vk::Result Allocator.bind_buffer_memory(self, Allocation allocation, vk::Buffer buffer) @cname("vmaBindBufferMemory");
+extern fn vk::Result Allocator.bind_buffer_memory2(self, Allocation allocation, vk::DeviceSize offset, vk::Buffer buffer, void* next) @cname("vmaBindBufferMemory2");
+extern fn vk::Result Allocator.find_memory_type_index(self, uint memory_type_bits, AllocationCreateInfo* ci, uint* out_index) @cname("vmaFindMemoryTypeIndex");
+extern fn vk::Result Allocator.find_memory_type_index_for_buffer_info(self, vk::BufferCreateInfo* bi, AllocationCreateInfo* ci, uint* out_index) @cname("vmaFindMemoryTypeIndexForBufferInfo");
+extern fn vk::Result Allocator.find_memory_type_index_for_image_info(self, vk::ImageCreateInfo* ii, AllocationCreateInfo* ci, uint* out_index) @cname("vmaFindMemoryTypeIndexForImageInfo");
+
+extern fn vk::Result Allocator.create_image(self, vk::ImageCreateInfo* image_info, AllocationCreateInfo* alloc_info, vk::Image* out_image, Allocation* out_allocation, AllocationInfo* out_info) @cname("vmaCreateImage");
+extern fn void Allocator.destroy_image(self, vk::Image image, Allocation allocation) @cname("vmaDestroyImage");
+extern fn vk::Result Allocator.bind_image_memory(self, Allocation allocation, vk::Image image) @cname("vmaBindImageMemory");
+extern fn vk::Result Allocator.bind_image_memory2(self, Allocation allocation, vk::DeviceSize offset, vk::Image image, void* next) @cname("vmaBindImageMemory2");
+extern fn vk::Result Allocator.allocate_memory_for_image(self, vk::Image image, AllocationCreateInfo* ci, Allocation* out_alloc, AllocationInfo* out_info) @cname("vmaAllocateMemoryForImage");
+
+extern fn void Allocator.get_allocator_info(self, AllocatorInfo* out_info) @cname("vmaGetAllocatorInfo");
+extern fn void Allocator.get_physical_device_properties(self, vk::PhysicalDeviceProperties** out_props) @cname("vmaGetPhysicalDeviceProperties");
+extern fn void Allocator.get_memory_properties(self, vk::PhysicalDeviceMemoryProperties** out_props) @cname("vmaGetMemoryProperties");
+extern fn void Allocator.get_memory_type_properties(self, uint type_index, vk::MemoryPropertyFlags* out_flags) @cname("vmaGetMemoryTypeProperties");
+extern fn void Allocator.calculate_statistics(self, TotalStatistics* out_stats) @cname("vmaCalculateStatistics");
+extern fn void Allocator.get_heap_budgets(self, Budget* out_budgets) @cname("vmaGetHeapBudgets");
+extern fn void Allocator.build_stats_string(self, ZString* out_str, vk::Bool32 detailed) @cname("vmaBuildStatsString");
+extern fn void Allocator.free_stats_string(self, ZString str) @cname("vmaFreeStatsString");
+
+extern fn vk::Result Allocator.create_pool(self, PoolCreateInfo* ci, Pool* out_pool) @cname("vmaCreatePool");
+extern fn void Allocator.destroy_pool(self, Pool pool) @cname("vmaDestroyPool");
+extern fn void Allocator.get_pool_statistics(self, Pool pool, Statistics* out_stats) @cname("vmaGetPoolStatistics");
+extern fn void Allocator.calculate_pool_statistics(self, Pool pool, DetailedStatistics* out_stats) @cname("vmaCalculatePoolStatistics");
+extern fn vk::Result Allocator.check_pool_corruption(self, Pool pool) @cname("vmaCheckPoolCorruption");
+extern fn void Allocator.get_pool_name(self, Pool pool, ZString* out_name) @cname("vmaGetPoolName");
+extern fn void Allocator.set_pool_name(self, Pool pool, ZString name) @cname("vmaSetPoolName");
+
+extern fn vk::Result Allocator.begin_defragmentation(self, DefragmentationInfo* info, DefragmentationContext* out_ctx) @cname("vmaBeginDefragmentation");
+extern fn void Allocator.end_defragmentation(self, DefragmentationContext ctx, DefragmentationStats* out_stats) @cname("vmaEndDefragmentation");
+extern fn vk::Result Allocator.begin_defragmentation_pass(self, DefragmentationContext ctx, DefragmentationPassMoveInfo* pass_info) @cname("vmaBeginDefragmentationPass");
+extern fn vk::Result Allocator.end_defragmentation_pass(self, DefragmentationContext ctx, DefragmentationPassMoveInfo* pass_info) @cname("vmaEndDefragmentationPass");
+
+extern fn void Allocator.set_current_frame_index(self, uint frame_index) @cname("vmaSetCurrentFrameIndex");
+extern fn vk::Result Allocator.check_corruption(self, uint memory_type_bits) @cname("vmaCheckCorruption");
+extern fn void Allocator.set_allocation_name(self, Allocation allocation, ZString name) @cname("vmaSetAllocationName");
+extern fn void Allocator.set_allocation_user_data(self, Allocation allocation, void* user_data) @cname("vmaSetAllocationUserData");
+extern fn void Allocator.get_allocation_memory_properties(self, Allocation allocation, vk::MemoryPropertyFlags* out_flags) @cname("vmaGetAllocationMemoryProperties");
+extern fn void Allocator.get_allocation_info2(self, Allocation allocation, AllocationInfo2* out_info) @cname("vmaGetAllocationInfo2");
+extern fn vk::Result Allocator.create_aliasing_buffer(self, Allocation allocation, vk::BufferCreateInfo* bi, vk::Buffer* out_buffer) @cname("vmaCreateAliasingBuffer");
+extern fn vk::Result Allocator.create_aliasing_buffer2(self, Allocation allocation, vk::DeviceSize offset, vk::BufferCreateInfo* bi, vk::Buffer* out_buffer) @cname("vmaCreateAliasingBuffer2");
+extern fn vk::Result Allocator.create_aliasing_image(self, Allocation allocation, vk::ImageCreateInfo* ii, vk::Image* out_image) @cname("vmaCreateAliasingImage");
+extern fn vk::Result Allocator.create_aliasing_image2(self, Allocation allocation, vk::DeviceSize offset, vk::ImageCreateInfo* ii, vk::Image* out_image) @cname("vmaCreateAliasingImage2");
+extern fn vk::Result Allocator.create_buffer_with_alignment(self, vk::BufferCreateInfo* bi, AllocationCreateInfo* ci, vk::DeviceSize min_alignment, vk::Buffer* out_buffer, Allocation* out_alloc, AllocationInfo* out_info) @cname("vmaCreateBufferWithAlignment");
+extern fn vk::Result Allocator.allocate_memory_pages(self, vk::MemoryRequirements* reqs, AllocationCreateInfo* cis, usz count, Allocation* out_allocs, AllocationInfo* out_infos) @cname("vmaAllocateMemoryPages");
+extern fn void Allocator.free_memory_pages(self, usz count, Allocation* allocations) @cname("vmaFreeMemoryPages");
+
+extern fn void VirtualBlock.destroy(self) @cname("vmaDestroyVirtualBlock");
+extern fn vk::Bool32 VirtualBlock.is_empty(self) @cname("vmaIsVirtualBlockEmpty");
+extern fn vk::Result VirtualBlock.allocate(self, VirtualAllocationCreateInfo* ci, VirtualAllocation* out_alloc, vk::DeviceSize* out_offset) @cname("vmaVirtualAllocate");
+extern fn void VirtualBlock.free(self, VirtualAllocation allocation) @cname("vmaVirtualFree");
+extern fn void VirtualBlock.clear(self) @cname("vmaClearVirtualBlock");
+extern fn void VirtualBlock.get_allocation_info(self, VirtualAllocation allocation, VirtualAllocationInfo* out_info) @cname("vmaGetVirtualAllocationInfo");
+extern fn void VirtualBlock.set_allocation_user_data(self, VirtualAllocation allocation, void* user_data) @cname("vmaSetVirtualAllocationUserData");
+extern fn void VirtualBlock.get_statistics(self, Statistics* out_stats) @cname("vmaGetVirtualBlockStatistics");
+extern fn void VirtualBlock.calculate_statistics(self, DetailedStatistics* out_stats) @cname("vmaCalculateVirtualBlockStatistics");
+extern fn void VirtualBlock.build_stats_string(self, ZString* out_str, vk::Bool32 detailed) @cname("vmaBuildVirtualBlockStatsString");
+extern fn void VirtualBlock.free_stats_string(self, ZString str) @cname("vmaFreeVirtualBlockStatsString");
+
+extern fn vk::Result create_allocator(AllocatorCreateInfo* info, Allocator* out) @cname("vmaCreateAllocator");
+extern fn vk::Result create_virtual_block(VirtualBlockCreateInfo* info, VirtualBlock* out_block) @cname("vmaCreateVirtualBlock");
