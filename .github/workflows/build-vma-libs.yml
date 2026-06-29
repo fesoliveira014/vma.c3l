@@ -32,10 +32,13 @@ jobs:
           g++ -std=c++17 -Iinc -Ivh/include scripts/vma_size_probe.cpp -o probe
           sz=$(./probe | awk '$1 == "AllocatorCreateInfo" { print $2 }')
           test "$sz" = "80" || { echo "ERROR: AllocatorCreateInfo=$sz expected 80" >&2; exit 1; }
+          sz2=$(./probe | awk '$1 == "AllocationInfo2" { print $2 }')
+          test "$sz2" = "72" || { echo "ERROR: AllocationInfo2=$sz2 expected 72" >&2; exit 1; }
       - uses: actions/upload-artifact@v4
         with:
           name: libVulkanMemoryAllocator-linux-x64
           path: libVulkanMemoryAllocator.a
+          retention-days: 180
 
   windows-x64:
     runs-on: windows-latest
@@ -54,9 +57,10 @@ jobs:
       - name: Build static lib (MSVC)
         shell: cmd
         run: |
-          cl /std:c++17 /O2 /EHsc /I inc /I vh\include /c scripts\vma_impl.cpp /Fo:vma_impl.obj
+          cl /std:c++17 /O2 /EHsc /I inc /I vh\include /c scripts\vma_impl.cpp /Fovma_impl.obj
           lib /OUT:VulkanMemoryAllocator.lib vma_impl.obj
       - uses: actions/upload-artifact@v4
         with:
           name: VulkanMemoryAllocator-windows-x64
           path: VulkanMemoryAllocator.lib
+          retention-days: 180

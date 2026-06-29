@@ -3,8 +3,9 @@ module vma;
 import vk;
 
 <* Check default-pool corruption for the given memory types. Returns normally on
-   SUCCESS or (accepted) FEATURE_NOT_PRESENT when detection is off; raises
-   CORRUPTION_DETECTED when corruption is found (VMA reports it as VK_ERROR_UNKNOWN). *>
+   SUCCESS; raises FEATURE_NOT_PRESENT when corruption detection is disabled (callers
+   typically accept it) and CORRUPTION_DETECTED when corruption is found (VMA reports
+   it as VK_ERROR_UNKNOWN). *>
 fn void? Allocator.try_check_corruption(self, uint memory_type_bits) {
     vk::Result r = self.check_corruption(memory_type_bits);
     switch (r) {
@@ -44,8 +45,9 @@ fn BufferAllocation? Allocator.try_create_buffer_with_alignment(self, vk::Buffer
     return ba;
 }
 
-<* Allocate a batch of pages, one per (reqs, cis) pair. All three slices must be the
-   same nonzero length; results land in out_allocs. Free with free_memory_pages. *>
+<* Allocate a batch of pages, one per (reqs, cis) pair. The three slices must be the
+   same length (an empty batch is a no-op); results land in out_allocs. Free with
+   free_memory_pages. *>
 fn void? Allocator.try_allocate_memory_pages(self, vk::MemoryRequirements[] reqs, AllocationCreateInfo[] cis, Allocation[] out_allocs) {
     if (reqs.len != cis.len || reqs.len != out_allocs.len) return BATCH_LENGTH_MISMATCH~;
     if (out_allocs.len == 0) return;
