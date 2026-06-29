@@ -19,7 +19,12 @@ faultdef
     VALLOC_BAD_OFFSET,
     VALLOC_INFO_MISMATCH,
     VALLOC_USERDATA_MISMATCH,
-    VSTATS_MISMATCH;
+    VSTATS_MISMATCH,
+    MISC_NAME_MISMATCH,
+    MISC_USERDATA_MISMATCH,
+    MISC_MEMPROPS,
+    MISC_INFO2,
+    MISC_ALIGN;
 
 const ulong BUFFER_SIZE = 65536;
 const uint MAP_CHECK_BYTES = 4;
@@ -30,13 +35,16 @@ const ulong VBLOCK_SIZE = 1 << 20;
 const uint VALLOC_COUNT = 8;
 const ulong VALLOC_SIZE = 1024;
 const ulong VALLOC_ALIGN = 256;
+const uint PAGE_COUNT = 4;
+const ulong PAGE_SIZE = 4096;
+const ulong MISC_ALIGN_REQ = 256;
 
 fn int main() {
     if (catch err = run()) {
         io::printfn("vma smoke FAILED: %s", err);
         return 1;
     }
-    io::printn("vma smoke OK: virtual + map + image + manual buffer/reqs/image + stats + pool + defrag");
+    io::printn("vma smoke OK: virtual + map + image + manual buffer/reqs/image + stats + pool + defrag + misc");
     return 0;
 }
 
@@ -63,6 +71,7 @@ fn void? run() {
     stats_round_trip(alloc, h.device)!;
     pool_round_trip(alloc)!;
     defrag_round_trip(alloc)!;
+    misc_round_trip(alloc, h.device)!;
 }
 
 <* Map a host-visible buffer, write+flush+invalidate+read through the mapped
@@ -406,4 +415,75 @@ fn void? virtual_round_trip() {
     block.try_allocate(&aci2)!;
     block.clear();
     if (block.is_empty() == 0) return VBLOCK_NOT_CLEARED~;
+}
+
+<* Exercise the misc leftovers: frame index, allocation name/user-data round-trip,
+   memory properties, info2, corruption check, buffer-with-alignment, memory pages,
+   and an aliasing buffer. *>
+fn void? misc_round_trip(vma::Allocator alloc, vk::Device device) {
+    alloc.set_current_frame_index(0);
+
+    vk::BufferCreateInfo bi = {
+        .s_type       = vk::StructureType.BUFFER_CREATE_INFO,
+        .size         = BUFFER_SIZE,
+        .usage        = vk::BufferUsageFlagBits.TRANSFER_DST_BIT,
+        .sharing_mode = vk::SharingMode.EXCLUSIVE,
+    };
+    vma::AllocationCreateInfo ai = {
+        .usage = vma::MemoryUsage.AUTO,
+        .flags = { .host_access_random = true },
+    };
+    vma::BufferAllocation ba = alloc.try_create_buffer(&bi, &ai)!;
+    defer alloc.destroy_buffer(ba.buffer, ba.allocation);
+
+    alloc.set_allocation_name(ba.allocation, "smoke_alloc");
+    vma::AllocationInfo ni;
+    alloc.get_allocation_info(ba.allocation, &ni);
+    if (ni.name.str_view() != "smoke_alloc") return MISC_NAME_MISMATCH~;
+
+    int marker = 7;
+    alloc.set_allocation_user_data(ba.allocation, &marker);
+    vma::AllocationInfo ui;
+    alloc.get_allocation_info(ba.allocation, &ui);
+    if (ui.user_data != (void*)&marker) return MISC_USERDATA_MISMATCH~;
+
+    vk::MemoryPropertyFlags mp = alloc.allocation_memory_properties(ba.allocation);
+    if (((uint)mp & (uint)vk::MemoryPropertyFlagBits.HOST_VISIBLE_BIT) == 0) return MISC_MEMPROPS~;
+
+    vma::AllocationInfo2 i2 = alloc.allocation_info2(ba.allocation);
+    if (i2.allocation_info.size < BUFFER_SIZE) return MISC_INFO2~;
+    if (i2.block_size < i2.allocation_info.size) return MISC_INFO2~;
+
+    if (catch err = alloc.try_check_corruption(0xFFFFFFFF)) {
+        if (err != vma::FEATURE_NOT_PRESENT) return err~;
+    }
+
+    vma::BufferAllocation aba = alloc.try_create_buffer_with_alignment(&bi, &ai, MISC_ALIGN_REQ)!;
+    defer alloc.destroy_buffer(aba.buffer, aba.allocation);
+    if (aba.info.offset % MISC_ALIGN_REQ != 0) return MISC_ALIGN~;
+
+    vk::BufferCreateInfo pbi = {
+        .s_type       = vk::StructureType.BUFFER_CREATE_INFO,
+        .size         = PAGE_SIZE,
+        .usage        = vk::BufferUsageFlagBits.TRANSFER_SRC_BIT,
+        .sharing_mode = vk::SharingMode.EXCLUSIVE,
+    };
+    vk::Buffer probe;
+    if (vk::create_buffer(device, &pbi, null, &probe) != vk::Result.SUCCESS) return BUFFER_NULL~;
+    vk::MemoryRequirements one;
+    vk::get_buffer_memory_requirements(device, probe, &one);
+    vk::destroy_buffer(device, probe, null);
+
+    vk::MemoryRequirements[PAGE_COUNT]   reqs;
+    vma::AllocationCreateInfo[PAGE_COUNT] cis;
+    vma::Allocation[PAGE_COUNT]          pages;
+    for (uint i = 0; i < PAGE_COUNT; i++) {
+        reqs[i] = one;
+        cis[i] = { .usage = vma::MemoryUsage.GPU_ONLY };
+    }
+    alloc.try_allocate_memory_pages(&reqs, &cis, &pages)!;
+    alloc.free_memory_pages(PAGE_COUNT, &pages[0]);
+
+    vk::Buffer alias_buf = alloc.try_create_aliasing_buffer(ba.allocation, &bi)!;
+    vk::destroy_buffer(device, alias_buf, null);
 }
