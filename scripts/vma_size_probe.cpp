@@ -19,5 +19,6 @@ int main(void) {
     std::printf("VirtualBlockCreateInfo %zu\n", sizeof(VmaVirtualBlockCreateInfo));
     std::printf("VirtualAllocationCreateInfo %zu\n", sizeof(VmaVirtualAllocationCreateInfo));
     std::printf("VirtualAllocationInfo %zu\n", sizeof(VmaVirtualAllocationInfo));
+    std::printf("AllocationInfo2 %zu\n", sizeof(VmaAllocationInfo2));
     return 0;
 }

@@ -1,0 +1,24 @@
+module vma;
+
+import vk;
+
+struct AllocationInfo2 {
+    AllocationInfo allocation_info;
+    vk::DeviceSize block_size;
+    vk::Bool32     dedicated_memory;
+}
+$assert(AllocationInfo2::size == 72);
+
+extern fn void Allocator.set_current_frame_index(self, uint frame_index) @cname("vmaSetCurrentFrameIndex");
+extern fn vk::Result Allocator.check_corruption(self, uint memory_type_bits) @cname("vmaCheckCorruption");
+extern fn void Allocator.set_allocation_name(self, Allocation allocation, ZString name) @cname("vmaSetAllocationName");
+extern fn void Allocator.set_allocation_user_data(self, Allocation allocation, void* user_data) @cname("vmaSetAllocationUserData");
+extern fn void Allocator.get_allocation_memory_properties(self, Allocation allocation, vk::MemoryPropertyFlags* out_flags) @cname("vmaGetAllocationMemoryProperties");
+extern fn void Allocator.get_allocation_info2(self, Allocation allocation, AllocationInfo2* out_info) @cname("vmaGetAllocationInfo2");
+extern fn vk::Result Allocator.create_aliasing_buffer(self, Allocation allocation, vk::BufferCreateInfo* bi, vk::Buffer* out_buffer) @cname("vmaCreateAliasingBuffer");
+extern fn vk::Result Allocator.create_aliasing_buffer2(self, Allocation allocation, vk::DeviceSize offset, vk::BufferCreateInfo* bi, vk::Buffer* out_buffer) @cname("vmaCreateAliasingBuffer2");
+extern fn vk::Result Allocator.create_aliasing_image(self, Allocation allocation, vk::ImageCreateInfo* ii, vk::Image* out_image) @cname("vmaCreateAliasingImage");
+extern fn vk::Result Allocator.create_aliasing_image2(self, Allocation allocation, vk::DeviceSize offset, vk::ImageCreateInfo* ii, vk::Image* out_image) @cname("vmaCreateAliasingImage2");
+extern fn vk::Result Allocator.create_buffer_with_alignment(self, vk::BufferCreateInfo* bi, AllocationCreateInfo* ci, vk::DeviceSize min_alignment, vk::Buffer* out_buffer, Allocation* out_alloc, AllocationInfo* out_info) @cname("vmaCreateBufferWithAlignment");
+extern fn vk::Result Allocator.allocate_memory_pages(self, vk::MemoryRequirements* reqs, AllocationCreateInfo* cis, usz count, Allocation* out_allocs, AllocationInfo* out_infos) @cname("vmaAllocateMemoryPages");
+extern fn void Allocator.free_memory_pages(self, usz count, Allocation* allocations) @cname("vmaFreeMemoryPages");
