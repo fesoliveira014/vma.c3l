@@ -1,0 +1,52 @@
+module vma;
+
+import vk;
+
+typedef VirtualBlock      = inline void*;
+typedef VirtualAllocation = inline void*;
+
+bitstruct VirtualBlockCreateFlags : uint {
+    bool linear_algorithm : 0;
+}
+
+bitstruct VirtualAllocationCreateFlags : uint {
+    bool upper_address       : 6;
+    bool strategy_min_memory : 16;
+    bool strategy_min_time   : 17;
+    bool strategy_min_offset : 18;
+}
+
+struct VirtualBlockCreateInfo {
+    vk::DeviceSize           size;
+    VirtualBlockCreateFlags  flags;
+    vk::AllocationCallbacks* allocation_callbacks;
+}
+$assert(VirtualBlockCreateInfo::size == 24);
+
+struct VirtualAllocationCreateInfo {
+    vk::DeviceSize               size;
+    vk::DeviceSize               alignment;
+    VirtualAllocationCreateFlags flags;
+    void*                        user_data;
+}
+$assert(VirtualAllocationCreateInfo::size == 32);
+
+struct VirtualAllocationInfo {
+    vk::DeviceSize offset;
+    vk::DeviceSize size;
+    void*          user_data;
+}
+$assert(VirtualAllocationInfo::size == 24);
+
+extern fn vk::Result create_virtual_block(VirtualBlockCreateInfo* info, VirtualBlock* out_block) @cname("vmaCreateVirtualBlock");
+extern fn void VirtualBlock.destroy(self) @cname("vmaDestroyVirtualBlock");
+extern fn vk::Bool32 VirtualBlock.is_empty(self) @cname("vmaIsVirtualBlockEmpty");
+extern fn vk::Result VirtualBlock.allocate(self, VirtualAllocationCreateInfo* ci, VirtualAllocation* out_alloc, vk::DeviceSize* out_offset) @cname("vmaVirtualAllocate");
+extern fn void VirtualBlock.free(self, VirtualAllocation allocation) @cname("vmaVirtualFree");
+extern fn void VirtualBlock.clear(self) @cname("vmaClearVirtualBlock");
+extern fn void VirtualBlock.get_allocation_info(self, VirtualAllocation allocation, VirtualAllocationInfo* out_info) @cname("vmaGetVirtualAllocationInfo");
+extern fn void VirtualBlock.set_allocation_user_data(self, VirtualAllocation allocation, void* user_data) @cname("vmaSetVirtualAllocationUserData");
+extern fn void VirtualBlock.get_statistics(self, Statistics* out_stats) @cname("vmaGetVirtualBlockStatistics");
+extern fn void VirtualBlock.calculate_statistics(self, DetailedStatistics* out_stats) @cname("vmaCalculateVirtualBlockStatistics");
+extern fn void VirtualBlock.build_stats_string(self, ZString* out_str, vk::Bool32 detailed) @cname("vmaBuildVirtualBlockStatsString");
+extern fn void VirtualBlock.free_stats_string(self, ZString str) @cname("vmaFreeVirtualBlockStatsString");

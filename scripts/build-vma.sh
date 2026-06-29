@@ -36,4 +36,7 @@ expect_size DefragmentationInfo 48
 expect_size DefragmentationMove 24
 expect_size DefragmentationPassMoveInfo 16
 expect_size DefragmentationStats 24
+expect_size VirtualBlockCreateInfo 24
+expect_size VirtualAllocationCreateInfo 32
+expect_size VirtualAllocationInfo 24
 echo "Done."

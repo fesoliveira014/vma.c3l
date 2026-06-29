@@ -16,5 +16,8 @@ int main(void) {
     std::printf("DefragmentationMove %zu\n", sizeof(VmaDefragmentationMove));
     std::printf("DefragmentationPassMoveInfo %zu\n", sizeof(VmaDefragmentationPassMoveInfo));
     std::printf("DefragmentationStats %zu\n", sizeof(VmaDefragmentationStats));
+    std::printf("VirtualBlockCreateInfo %zu\n", sizeof(VmaVirtualBlockCreateInfo));
+    std::printf("VirtualAllocationCreateInfo %zu\n", sizeof(VmaVirtualAllocationCreateInfo));
+    std::printf("VirtualAllocationInfo %zu\n", sizeof(VmaVirtualAllocationInfo));
     return 0;
 }
