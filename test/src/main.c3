@@ -13,24 +13,36 @@ faultdef
     INFO_MISMATCH,
     POOL_NAME_MISMATCH,
     POOL_STATS_EMPTY,
-    DEFRAG_RUNAWAY;
+    DEFRAG_RUNAWAY,
+    VBLOCK_NOT_EMPTY,
+    VBLOCK_NOT_CLEARED,
+    VALLOC_BAD_OFFSET,
+    VALLOC_INFO_MISMATCH,
+    VALLOC_USERDATA_MISMATCH,
+    VSTATS_MISMATCH;
 
 const ulong BUFFER_SIZE = 65536;
 const uint MAP_CHECK_BYTES = 4;
 const ulong DEFRAG_BLOCK_SIZE = 131072;
 const uint DEFRAG_BUFFERS = 16;
 const uint MAX_DEFRAG_PASSES = 64;
+const ulong VBLOCK_SIZE = 1 << 20;
+const uint VALLOC_COUNT = 8;
+const ulong VALLOC_SIZE = 1024;
+const ulong VALLOC_ALIGN = 256;
 
 fn int main() {
     if (catch err = run()) {
         io::printfn("vma smoke FAILED: %s", err);
         return 1;
     }
-    io::printn("vma smoke OK: map + image + manual buffer/reqs/image + stats + pool + defrag");
+    io::printn("vma smoke OK: virtual + map + image + manual buffer/reqs/image + stats + pool + defrag");
     return 0;
 }
 
 fn void? run() {
+    virtual_round_trip()!;
+
     HeadlessVk h = create_headless_vk()!;
     defer destroy_headless_vk(&h);
 
@@ -347,4 +359,51 @@ fn void? defrag_round_trip(vma::Allocator alloc) {
         if (passes > MAX_DEFRAG_PASSES) return DEFRAG_RUNAWAY~;
         if (!alloc.try_end_defragmentation_pass(ctx, &pass)!) break;
     }
+}
+
+<* Device-free: create a virtual block, sub-allocate ranges, check offsets/info/
+   user-data/statistics round-trip, free and clear. Needs no Vulkan device. *>
+fn void? virtual_round_trip() {
+    vma::VirtualBlockCreateInfo bci = { .size = VBLOCK_SIZE };
+    vma::VirtualBlock block = vma::try_create_virtual_block(&bci)!;
+    defer block.destroy();
+
+    if (block.is_empty() == 0) return VBLOCK_NOT_EMPTY~;
+
+    vma::VirtualAllocation[VALLOC_COUNT] allocs;
+    for (uint i = 0; i < VALLOC_COUNT; i++) {
+        vma::VirtualAllocationCreateInfo aci = { .size = VALLOC_SIZE, .alignment = VALLOC_ALIGN };
+        vma::VirtualAllocationResult r = block.try_allocate(&aci)!;
+        allocs[i] = r.allocation;
+        if (i == 0 && r.offset != 0) return VALLOC_BAD_OFFSET~;
+        if (r.offset % VALLOC_ALIGN != 0) return VALLOC_BAD_OFFSET~;
+    }
+
+    if (block.is_empty() != 0) return VBLOCK_NOT_EMPTY~;
+
+    vma::VirtualAllocationInfo info = block.allocation_info(allocs[0]);
+    if (info.size != VALLOC_SIZE) return VALLOC_INFO_MISMATCH~;
+
+    int marker = 42;
+    block.set_allocation_user_data(allocs[0], &marker);
+    vma::VirtualAllocationInfo info2 = block.allocation_info(allocs[0]);
+    if (info2.user_data != (void*)&marker) return VALLOC_USERDATA_MISMATCH~;
+
+    vma::Statistics stats = block.statistics();
+    if (stats.allocation_count != VALLOC_COUNT) return VSTATS_MISMATCH~;
+    if (stats.allocation_bytes < VALLOC_SIZE * VALLOC_COUNT) return VSTATS_MISMATCH~;
+    vma::DetailedStatistics dstats = block.detailed_statistics();
+    if (dstats.statistics.allocation_count != VALLOC_COUNT) return VSTATS_MISMATCH~;
+
+    String js = block.stats_string(true);
+    defer free(js.ptr);
+    if (js.len == 0) return VSTATS_MISMATCH~;
+
+    for (uint i = 0; i < VALLOC_COUNT; i++) block.free(allocs[i]);
+    if (block.is_empty() == 0) return VBLOCK_NOT_EMPTY~;
+
+    vma::VirtualAllocationCreateInfo aci2 = { .size = VALLOC_SIZE };
+    block.try_allocate(&aci2)!;
+    block.clear();
+    if (block.is_empty() == 0) return VBLOCK_NOT_CLEARED~;
 }
