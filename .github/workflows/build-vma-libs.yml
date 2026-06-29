@@ -1,0 +1,62 @@
+name: build-vma-libs
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/vma_impl.cpp'
+      - 'scripts/vma_size_probe.cpp'
+      - '.github/workflows/build-vma-libs.yml'
+
+env:
+  VMA_TAG: v3.3.0
+  VULKAN_HEADERS_TAG: v1.3.296
+
+jobs:
+  linux-x64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch headers
+        run: |
+          git clone --depth 1 --branch "$VULKAN_HEADERS_TAG" https://github.com/KhronosGroup/Vulkan-Headers.git vh
+          git clone --depth 1 --branch "$VMA_TAG" https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git vma
+          mkdir -p inc/vma
+          cp vma/include/vk_mem_alloc.h inc/vma/
+      - name: Build static lib
+        run: |
+          g++ -std=c++17 -O2 -fPIC -c scripts/vma_impl.cpp -Iinc -Ivh/include -o vma_impl.o
+          ar rcs libVulkanMemoryAllocator.a vma_impl.o
+      - name: Size-probe sanity (AllocatorCreateInfo == 80)
+        run: |
+          g++ -std=c++17 -Iinc -Ivh/include scripts/vma_size_probe.cpp -o probe
+          sz=$(./probe | awk '$1 == "AllocatorCreateInfo" { print $2 }')
+          test "$sz" = "80" || { echo "ERROR: AllocatorCreateInfo=$sz expected 80" >&2; exit 1; }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libVulkanMemoryAllocator-linux-x64
+          path: libVulkanMemoryAllocator.a
+
+  windows-x64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch headers
+        shell: bash
+        run: |
+          git clone --depth 1 --branch "$VULKAN_HEADERS_TAG" https://github.com/KhronosGroup/Vulkan-Headers.git vh
+          git clone --depth 1 --branch "$VMA_TAG" https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git vma
+          mkdir -p inc/vma
+          cp vma/include/vk_mem_alloc.h inc/vma/
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Build static lib (MSVC)
+        shell: cmd
+        run: |
+          cl /std:c++17 /O2 /EHsc /I inc /I vh\include /c scripts\vma_impl.cpp /Fo:vma_impl.obj
+          lib /OUT:VulkanMemoryAllocator.lib vma_impl.obj
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VulkanMemoryAllocator-windows-x64
+          path: VulkanMemoryAllocator.lib

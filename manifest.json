@@ -127,9 +127,9 @@
       // Extra flags to the linker for this target:
       "link-args" : [],
       // C3 libraries this target depends on:
-      "dependencies" : [],
+      "dependencies" : [ "vk" ],
       // The external libraries to link for this target:
-      "linked-libraries" : []
+      "linked-libraries" : [ "VulkanMemoryAllocator" ]
     },
   }
 }
