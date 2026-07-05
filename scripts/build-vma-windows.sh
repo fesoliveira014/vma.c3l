@@ -13,17 +13,20 @@ set -eu
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/linked-libs/windows-x64"
 mkdir -p "$OUT"
+# cl -Fo/-Fe and lib -out need Windows-form paths; MSYS only auto-converts
+# whole arguments that start with '/'.
+WOUT="$(cygpath -w "$OUT")"
 trap 'rm -f "$OUT/vma_impl.obj" "$OUT/vma_size_probe.exe" "$OUT/vma_size_probe.obj"' EXIT
 
 echo "Building VMA static lib -> $OUT/VulkanMemoryAllocator.lib"
 cl -nologo -std:c++17 -O2 -MD -EHsc -c "$ROOT/scripts/vma_impl.cpp" \
     -I"$VULKAN_HEADERS/include" -I"$VMA_INCLUDE" \
-    -Fo"$OUT/vma_impl.obj"
-lib -nologo -out:"$OUT/VulkanMemoryAllocator.lib" "$OUT/vma_impl.obj"
+    -Fo"$WOUT\\vma_impl.obj"
+lib -nologo -out:"$WOUT\\VulkanMemoryAllocator.lib" "$WOUT\\vma_impl.obj"
 
 cl -nologo -std:c++17 -EHsc "$ROOT/scripts/vma_size_probe.cpp" \
     -I"$VULKAN_HEADERS/include" -I"$VMA_INCLUDE" \
-    -Fo"$OUT/vma_size_probe.obj" -Fe"$OUT/vma_size_probe.exe"
+    -Fo"$WOUT\\vma_size_probe.obj" -Fe"$WOUT\\vma_size_probe.exe"
 sizes=$("$OUT/vma_size_probe.exe")
 echo "$sizes"
 
