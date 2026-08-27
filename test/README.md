@@ -19,8 +19,7 @@ test/
 │   └── main.c3           the smoke harness (module vma_smoke)
 └── libs/
     ├── vma.c3l   ->       symlink to the repo root (the library under test)
-    ├── vk.c3l            git submodule — module `vk`, Vulkan types/loader
-    └── sdl3.c3l          git submodule — unused by this headless harness
+    └── vk.c3l            opt-in git submodule — module `vk`, Vulkan types/loader
 ```
 
 Dependencies resolve by their manifest `provides` name (`vma`, `vk`), not by
@@ -29,13 +28,12 @@ reached through the `vma.c3l` symlink.
 
 ## First-time setup
 
-The bindings under `libs/` are git submodules. After cloning:
+The Vulkan binding is pinned as an opt-in test submodule. Recursive consumer
+clones skip it. Initialize it explicitly before working on this harness:
 
 ```sh
-git submodule update --init test/libs
+git submodule update --init --checkout test/libs/vk.c3l
 ```
-
-(`git clone --recursive` does this at clone time.)
 
 The `vma.c3l` entry is a committed relative symlink (`-> ../..`); on Windows it
 needs `git config core.symlinks true` and either Developer Mode or an elevated
@@ -47,7 +45,8 @@ Compile-check (resolves all deps, no linking):
 
 ```sh
 cd test
-c3c compile-only src/main.c3 --libdir libs --lib vma --lib vk --target linux-x64
+c3c compile-only src/main.c3 src/vk_bootstrap.c3 \
+  --libdir libs --lib vma --lib vk --target linux-x64
 ```
 
 Build and run the smoke. Linking needs the VMA static lib
