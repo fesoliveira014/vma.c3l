@@ -1,6 +1,5 @@
-[submodule "test/libs/sdl3.c3l"]
-	path = test/libs/sdl3.c3l
-	url = https://github.com/fesoliveira014/sdl3.c3l.git
 [submodule "test/libs/vk.c3l"]
 	path = test/libs/vk.c3l
 	url = https://github.com/fesoliveira014/vk.c3l.git
+	update = none
+	shallow = true

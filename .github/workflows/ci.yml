@@ -1,0 +1,54 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  C3C_VERSION: "0.8.3"
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Verify consumer dependency boundary
+        run: |
+          python3 -B -m unittest scripts.test_consumer_dependencies -v
+          test ! -e test/libs/vk.c3l/.git
+
+      - name: Initialize test dependency
+        run: git submodule update --init --checkout test/libs/vk.c3l
+
+      - name: Install c3c
+        run: |
+          mkdir -p ~/tools
+          curl -fsSL -o /tmp/c3.tar.gz \
+            "https://github.com/c3lang/c3c/releases/download/v${C3C_VERSION}/c3-linux.tar.gz"
+          tar -xzf /tmp/c3.tar.gz -C ~/tools
+          echo "$HOME/tools/c3" >> "$GITHUB_PATH"
+
+      - name: Install lavapipe
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y mesa-vulkan-drivers
+          ICD=$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -1)
+          test -f "$ICD"
+          echo "VK_DRIVER_FILES=$ICD" >> "$GITHUB_ENV"
+
+      - name: Compile-check harness
+        working-directory: test
+        run: |
+          c3c compile-only src/main.c3 src/vk_bootstrap.c3 \
+            --libdir libs --lib vma --lib vk --target linux-x64
+
+      - name: Run smoke harness
+        working-directory: test
+        run: |
+          c3c build smoke
+          ./build/smoke
