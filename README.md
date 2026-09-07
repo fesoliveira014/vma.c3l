@@ -59,7 +59,7 @@ optional and maps `VkResult` to a fault).
 | Target | Prebuilt static lib | Notes |
 | --- | --- | --- |
 | `linux-x64` | included (`linked-libs/linux-x64/`) | ready to link |
-| `windows-x64` | via CI | the included GitHub Actions workflow builds it; commit the artifact (see [`docs/ci-cross-build.md`](docs/ci-cross-build.md)) |
+| `windows-x64` | via CI | the included GitHub Actions workflow builds it; commit the artifact (see [`docs/ci-cross-build.md`](docs/ci-cross-build.md)). Built `/MT`, so consumers need `"wincrt": "static"` |
 | macOS, BSD, 32-bit, ARM, WASM, … | not provided | build your own with `scripts/build-vma.sh` |
 
 ## Using it in your project
@@ -135,6 +135,13 @@ bash scripts/build-vma.sh               # -> linked-libs/linux-x64/libVulkanMemo
 The script also runs a size probe that pins the C struct layouts the bindings
 assert at compile time, so an ABI drift fails the build rather than corrupting
 memory silently.
+
+On Windows the archive is built with the static CRT (`/MT`). An MSVC archive carries
+a `RuntimeLibrary` mismatch record, so it links only into an executable built against
+the same CRT; `manifest.json`'s `windows-x64` target therefore declares
+`"wincrt": "static"` and consumers inherit it. Mixing CRTs surfaces as
+`lld-link: error: /failifmismatch: mismatch detected for 'RuntimeLibrary'`, not as a
+runtime bug.
 
 To build `linux-x64` and `windows-x64` through GitHub Actions, see
 [`docs/ci-cross-build.md`](docs/ci-cross-build.md).

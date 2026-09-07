@@ -4,6 +4,9 @@
 # core headers come from VULKAN_HEADERS or VULKAN_SDK; the VMA header dir
 # (containing vma/vk_mem_alloc.h) from VMA_INCLUDE or VULKAN_SDK/include.
 # cl/lib options use the '-' prefix so git-bash performs no path conversion.
+# -MT is deliberate and must match .github/workflows/build-vma-libs.yml: an archive
+# carries a RuntimeLibrary mismatch record, so it links only into consumers built
+# with the same CRT. Consumers select it through manifest.json's "wincrt": "static".
 set -eu
 : "${VULKAN_HEADERS:=${VULKAN_SDK:-}}"
 [ -n "$VULKAN_HEADERS" ] || { echo "set VULKAN_HEADERS or VULKAN_SDK" >&2; exit 1; }
@@ -19,12 +22,12 @@ WOUT="$(cygpath -w "$OUT")"
 trap 'rm -f "$OUT/vma_impl.obj" "$OUT/vma_size_probe.exe" "$OUT/vma_size_probe.obj"' EXIT
 
 echo "Building VMA static lib -> $OUT/VulkanMemoryAllocator.lib"
-cl -nologo -std:c++17 -O2 -MD -EHsc -c "$ROOT/scripts/vma_impl.cpp" \
+cl -nologo -std:c++17 -O2 -MT -EHsc -c "$ROOT/scripts/vma_impl.cpp" \
     -I"$VULKAN_HEADERS/include" -I"$VMA_INCLUDE" \
     -Fo"$WOUT\\vma_impl.obj"
 lib -nologo -out:"$WOUT\\VulkanMemoryAllocator.lib" "$WOUT\\vma_impl.obj"
 
-cl -nologo -std:c++17 -EHsc "$ROOT/scripts/vma_size_probe.cpp" \
+cl -nologo -std:c++17 -MT -EHsc "$ROOT/scripts/vma_size_probe.cpp" \
     -I"$VULKAN_HEADERS/include" -I"$VMA_INCLUDE" \
     -Fo"$WOUT\\vma_size_probe.obj" -Fe"$WOUT\\vma_size_probe.exe"
 sizes=$("$OUT/vma_size_probe.exe")
