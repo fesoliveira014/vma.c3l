@@ -14,11 +14,15 @@ itself. It requires a GitHub remote — it does not run from a local-only checko
 Header versions are pinned via the `VMA_TAG` / `VULKAN_HEADERS_TAG` env vars; bump
 them together when updating VMA.
 
+The windows job compiles with `/MT`, matching `scripts/build-vma-windows.sh`. Keep the
+two in step: the flag is not a preference but part of the archive's link contract, and
+an archive built one way cannot link into a consumer built the other.
+
 ## Enabling the windows target
 
 The `windows-x64` manifest target is already wired (`dependencies: ["vk"]`,
-`linked-libraries: ["VulkanMemoryAllocator"]`), but the lib itself is an artifact, not
-committed. To make a windows consumer link:
+`linked-libraries: ["VulkanMemoryAllocator"]`, `wincrt: "static"`). To refresh the
+committed lib:
 
 1. Run the workflow and download the `VulkanMemoryAllocator-windows-x64` artifact.
 2. Commit `VulkanMemoryAllocator.lib` to `linked-libs/windows-x64/`.

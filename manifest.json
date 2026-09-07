@@ -129,7 +129,9 @@
       // C3 libraries this target depends on:
       "dependencies" : [ "vk" ],
       // The external libraries to link for this target:
-      "linked-libraries" : [ "VulkanMemoryAllocator" ]
+      "linked-libraries" : [ "VulkanMemoryAllocator" ],
+      // The shipped archive is built /MT; a consumer on another CRT fails to link.
+      "wincrt" : "static"
     },
   }
 }

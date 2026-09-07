@@ -57,7 +57,7 @@ jobs:
       - name: Build static lib (MSVC)
         shell: cmd
         run: |
-          cl /std:c++17 /O2 /EHsc /I inc /I vh\include /c scripts\vma_impl.cpp /Fovma_impl.obj
+          cl /std:c++17 /O2 /MT /EHsc /I inc /I vh\include /c scripts\vma_impl.cpp /Fovma_impl.obj
           lib /OUT:VulkanMemoryAllocator.lib vma_impl.obj
       - uses: actions/upload-artifact@v4
         with:
