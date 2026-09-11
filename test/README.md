@@ -62,6 +62,12 @@ VK_LOADER_DRIVERS_SELECT='*lvp*' ./build/smoke   # select the lavapipe software 
 
 On success it prints a single `vma smoke OK: …` line and exits 0.
 
+The `smoke-windows` target is the same program for `windows-x64`. CI builds it
+with the MSVC-built `../linked-libs/windows-x64/VulkanMemoryAllocator.lib` and
+runs it against lavapipe from
+[mesa-dist-win](https://github.com/pal1000/mesa-dist-win) with the LunarG
+Vulkan runtime as loader; see the `windows` job in `.github/workflows/ci.yml`.
+
 ## What it covers
 
 `main.c3` drives the full binding surface in one run: the virtual allocator
