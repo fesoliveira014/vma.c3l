@@ -7,6 +7,7 @@ on:
 
 env:
   C3C_VERSION: "0.8.3"
+  MESA_DIST_WIN_VERSION: "26.2.0"
 
 jobs:
   linux:
@@ -24,6 +25,11 @@ jobs:
 
       - name: Initialize test dependency
         run: git submodule update --init --checkout test/libs/vk.c3l
+
+      - name: Build VMA static lib (linux-x64)
+        run: |
+          sh scripts/fetch-vma-headers.sh "$RUNNER_TEMP/sdk"
+          VULKAN_SDK="$RUNNER_TEMP/sdk" sh scripts/build-vma.sh
 
       - name: Install c3c
         run: |
@@ -52,3 +58,70 @@ jobs:
         run: |
           c3c build smoke
           ./build/smoke
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Initialize test dependency
+        run: git submodule update --init --checkout test/libs/vk.c3l
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build VMA static lib (windows-x64, MSVC /MT)
+        run: |
+          sh scripts/fetch-vma-headers.sh sdk
+          VULKAN_HEADERS=sdk VMA_INCLUDE=sdk/include sh scripts/build-vma-windows.sh
+
+      - name: Install c3c
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/c3.zip" \
+            "https://github.com/c3lang/c3c/releases/download/v${C3C_VERSION}/c3-windows.zip"
+          unzip -q "$RUNNER_TEMP/c3.zip" -d "$RUNNER_TEMP"
+          cygpath -w "$RUNNER_TEMP/c3" >> "$GITHUB_PATH"
+
+      - name: Install Vulkan loader (LunarG runtime)
+        shell: pwsh
+        run: |
+          curl.exe -fsSL -o "$env:RUNNER_TEMP\vulkan-runtime.exe" https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-runtime.exe
+          Start-Process -FilePath "$env:RUNNER_TEMP\vulkan-runtime.exe" -ArgumentList '/S' -Wait
+          if (-not (Test-Path "$env:SystemRoot\System32\vulkan-1.dll")) { throw "vulkan-1.dll not installed" }
+
+      - name: Install lavapipe (mesa-dist-win)
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/mesa.7z" \
+            "https://github.com/pal1000/mesa-dist-win/releases/download/${MESA_DIST_WIN_VERSION}/mesa3d-${MESA_DIST_WIN_VERSION}-release-msvc.7z"
+          7z x -y -o"$RUNNER_TEMP/mesa" "$RUNNER_TEMP/mesa.7z" x64/lvp_icd.x86_64.json x64/vulkan_lvp.dll > /dev/null
+          test -f "$RUNNER_TEMP/mesa/x64/lvp_icd.x86_64.json"
+          echo "LVP_ICD_JSON=$(cygpath -w "$RUNNER_TEMP/mesa/x64/lvp_icd.x86_64.json")" >> "$GITHUB_ENV"
+
+      # The runner is elevated and the loader ignores VK_DRIVER_FILES under
+      # elevation, so register the ICD system-wide through the registry instead.
+      - name: Register lavapipe ICD
+        shell: pwsh
+        run: |
+          $key = 'HKLM:\SOFTWARE\Khronos\Vulkan\Drivers'
+          New-Item -Path $key -Force | Out-Null
+          New-ItemProperty -Path $key -Name $env:LVP_ICD_JSON -PropertyType DWord -Value 0 -Force | Out-Null
+          Get-ItemProperty -Path $key | Format-List
+
+      - name: Compile-check harness
+        working-directory: test
+        run: |
+          c3c compile-only src/main.c3 src/vk_bootstrap.c3 \
+            --libdir libs --lib vma --lib vk --target windows-x64
+
+      - name: Run smoke harness
+        working-directory: test
+        run: |
+          c3c build smoke-windows
+          VK_LOADER_DEBUG=error,warn,driver ./build/smoke-windows.exe

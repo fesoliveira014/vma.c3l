@@ -1,0 +1,8 @@
+# agent/dev-process files, local only
+CLAUDE.md
+.claude/
+.superpowers/
+docs/
+
+# compiled VMA static libs: built by CI and attached to GitHub releases
+linked-libs/*/

@@ -49,9 +49,10 @@ c3c compile-only src/main.c3 src/vk_bootstrap.c3 \
   --libdir libs --lib vma --lib vk --target linux-x64
 ```
 
-Build and run the smoke. Linking needs the VMA static lib
-(`../linked-libs/linux-x64/`, included) and a `libvulkan`; running needs a working
-ICD on the loader's path:
+Build and run the smoke. Linking needs the VMA static lib in
+`../linked-libs/linux-x64/` (not tracked in git: build it with
+`../scripts/build-vma.sh` or take it from a release) and a `libvulkan`; running
+needs a working ICD on the loader's path:
 
 ```sh
 cd test
@@ -61,6 +62,12 @@ VK_LOADER_DRIVERS_SELECT='*lvp*' ./build/smoke   # select the lavapipe software 
 
 On success it prints a single `vma smoke OK: …` line and exits 0.
 
+The `smoke-windows` target is the same program for `windows-x64`. CI builds it
+with the MSVC-built `../linked-libs/windows-x64/VulkanMemoryAllocator.lib` and
+runs it against lavapipe from
+[mesa-dist-win](https://github.com/pal1000/mesa-dist-win) with the LunarG
+Vulkan runtime as loader; see the `windows` job in `.github/workflows/ci.yml`.
+
 ## What it covers
 
 `main.c3` drives the full binding surface in one run: the virtual allocator
@@ -69,9 +76,9 @@ statistics and budget queries, custom pools, a defragmentation pass, and the mis
 calls (allocation naming, memory pages, aliasing, …). The virtual-allocator path
 runs first, before any Vulkan device exists, to show it needs none.
 
-## Note on the syntax-check hook
+## Note on isolated syntax checks
 
-`.claude/hooks/c3-syntax-check.sh` compile-checks `.c3` files in isolation on
-write. Files here `import` external library modules (`vma`, `vk`), which that
-isolated check cannot see, so it may report false "No module named …" errors.
-Verify these files with the project-aware commands above instead.
+`c3c compile-only --no-obj <file>` on a single file here reports false
+"No module named …" errors, because these files `import` external library
+modules (`vma`, `vk`) that an isolated check cannot see. Verify them with the
+project-aware commands above instead.

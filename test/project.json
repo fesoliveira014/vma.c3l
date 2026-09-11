@@ -9,6 +9,10 @@
     "smoke": {
       "type": "executable",
       "target": "linux-x64"
+    },
+    "smoke-windows": {
+      "type": "executable",
+      "target": "windows-x64"
     }
   }
 }
