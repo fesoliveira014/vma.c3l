@@ -20,7 +20,9 @@ Bound against **VMA 3.3.0** and **C3 0.8.0**.
   dependency of the library, not test-only — `vma` cannot compile without it, and
   any consumer must also provide `vk` on its dependency search path.
 - **A compiled VMA static library for your target** under `linked-libs/<target>/`.
-  A `linux-x64` build is included; see [Platform support](#platform-support).
+  The git tree does not carry binaries; take them from a
+  [GitHub release](https://github.com/fesoliveira014/vma.c3l/releases) or build
+  them with the scripts. See [Platform support](#platform-support).
 
 ## What's bound
 
@@ -52,24 +54,35 @@ optional and maps `VkResult` to a fault).
   `VMA_STATIC_VULKAN_FUNCTIONS=1`: VMA calls `vkAllocateMemory` and friends
   directly against the `libvulkan` your program already links. There is no volk /
   dynamic-loader path.
-- **Prebuilt static libraries for targets other than `linux-x64`.** See below.
+- **Prebuilt static libraries for targets other than `linux-x64` and
+  `windows-x64`.** See below.
 
 ## Platform support
 
 | Target | Prebuilt static lib | Notes |
 | --- | --- | --- |
-| `linux-x64` | included (`linked-libs/linux-x64/`) | ready to link |
-| `windows-x64` | via CI | the included GitHub Actions workflow builds it; commit the artifact (see [`docs/ci-cross-build.md`](docs/ci-cross-build.md)). Built `/MT`, so consumers need `"wincrt": "static"` |
+| `linux-x64` | release asset `libVulkanMemoryAllocator-linux-x64.a` | GCC, `-fPIC` |
+| `windows-x64` | release asset `VulkanMemoryAllocator-windows-x64.lib` | MSVC, built `/MT`; the manifest sets `"wincrt": "static"` for consumers |
 | macOS, BSD, 32-bit, ARM, WASM, … | not provided | build your own with `scripts/build-vma.sh` |
+
+Every `v*` tag runs the `build-vma-libs` workflow, which compiles both targets and
+publishes a GitHub release with three kinds of asset: the two static libs above, a
+`vma.c3l-<tag>.zip` bundle (sources + `manifest.json` + `linked-libs/` for both
+targets, ready to drop into a dependency search path), and `SHA256SUMS`.
 
 ## Using it in your project
 
-1. **Vendor this binding and `vk`** into your dependency search path:
+1. **Vendor this binding and `vk`** into your dependency search path. The
+   simplest route is the release bundle, which already contains the static libs:
 
    ```sh
-   git clone https://github.com/fesoliveira014/vma.c3l libs/vma.c3l
-   git clone https://github.com/fesoliveira014/vk.c3l  libs/vk.c3l
+   curl -fsSLO https://github.com/fesoliveira014/vma.c3l/releases/latest/download/vma.c3l-<tag>.zip
+   unzip vma.c3l-<tag>.zip -d libs          # -> libs/vma.c3l
+   git clone https://github.com/fesoliveira014/vk.c3l libs/vk.c3l
    ```
+
+   Cloning this repository works too, but then step 3 is on you: the clone has no
+   binaries under `linked-libs/`.
 
 2. **Declare the dependencies** in your `project.json`:
 
@@ -84,7 +97,8 @@ optional and maps `VkResult` to a fault).
    directory name.
 
 3. **Provide a VMA static lib for your build target** under
-   `linked-libs/<target>/` (the `linux-x64` build is already there).
+   `linked-libs/<target>/`: from the release bundle, from the per-target release
+   assets, or built locally (next section).
 
 ### Example
 
@@ -143,8 +157,15 @@ the same CRT; `manifest.json`'s `windows-x64` target therefore declares
 `lld-link: error: /failifmismatch: mismatch detected for 'RuntimeLibrary'`, not as a
 runtime bug.
 
-To build `linux-x64` and `windows-x64` through GitHub Actions, see
-[`docs/ci-cross-build.md`](docs/ci-cross-build.md).
+Without a Vulkan SDK, `scripts/fetch-vma-headers.sh <dir>` clones the pinned
+Vulkan-Headers and VMA releases into an SDK-shaped `<dir>/include`; point
+`VULKAN_SDK` at `<dir>` and run the build script. CI (`.github/workflows/ci.yml`)
+does exactly this before it links the smoke harness, and the release workflow
+(`.github/workflows/build-vma-libs.yml`) does it for both targets.
+
+To cut a release: tag a commit `vX.Y.Z` and push the tag. The workflow builds
+`linux-x64` (GCC) and `windows-x64` (MSVC, `/MT`), and publishes the release
+with the libs, the `vma.c3l-vX.Y.Z.zip` bundle, and `SHA256SUMS`.
 
 ## Repository layout
 
@@ -154,9 +175,8 @@ To build `linux-x64` and `windows-x64` through GitHub Actions, see
 | `vma.c3` | the idiomatic wrappers and their result structs |
 | `vma_check.c3` | the `VkResult` → fault mapping (`faultdef` + `check`) |
 | `manifest.json` | library manifest (`provides: vma`) |
-| `linked-libs/<target>/` | per-target compiled VMA libraries |
-| `scripts/` | the static-lib build and the struct-size probe |
-| `docs/` | design notes and the CI build guide |
+| `linked-libs/<target>/` | per-target compiled VMA libraries (release assets; not tracked in git) |
+| `scripts/` | header fetch, the static-lib builds, and the struct-size probe |
 | `test/` | a standalone consumer harness — **not part of the shipped library** (see [`test/README.md`](test/README.md)) |
 
 The library manifest never references `test/`, so consumers of `vma` never pull

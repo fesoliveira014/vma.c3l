@@ -25,6 +25,11 @@ jobs:
       - name: Initialize test dependency
         run: git submodule update --init --checkout test/libs/vk.c3l
 
+      - name: Build VMA static lib (linux-x64)
+        run: |
+          sh scripts/fetch-vma-headers.sh "$RUNNER_TEMP/sdk"
+          VULKAN_SDK="$RUNNER_TEMP/sdk" sh scripts/build-vma.sh
+
       - name: Install c3c
         run: |
           mkdir -p ~/tools

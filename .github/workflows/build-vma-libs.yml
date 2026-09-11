@@ -1,16 +1,22 @@
 name: build-vma-libs
 
+# Builds the VMA static libs for every shipped target. On a `v*` tag it also
+# publishes a GitHub release with the libs and a ready-to-vendor `vma.c3l` bundle.
 on:
   workflow_dispatch:
   push:
+    branches: ['**']
+    tags: ['v*']
     paths:
       - 'scripts/vma_impl.cpp'
       - 'scripts/vma_size_probe.cpp'
+      - 'scripts/build-vma.sh'
+      - 'scripts/build-vma-windows.sh'
+      - 'scripts/fetch-vma-headers.sh'
       - '.github/workflows/build-vma-libs.yml'
 
-env:
-  VMA_TAG: v3.3.0
-  VULKAN_HEADERS_TAG: v1.3.296
+permissions:
+  contents: read
 
 jobs:
   linux-x64:
@@ -18,26 +24,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Fetch headers
-        run: |
-          git clone --depth 1 --branch "$VULKAN_HEADERS_TAG" https://github.com/KhronosGroup/Vulkan-Headers.git vh
-          git clone --depth 1 --branch "$VMA_TAG" https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git vma
-          mkdir -p inc/vma
-          cp vma/include/vk_mem_alloc.h inc/vma/
-      - name: Build static lib
-        run: |
-          g++ -std=c++17 -O2 -fPIC -c scripts/vma_impl.cpp -Iinc -Ivh/include -o vma_impl.o
-          ar rcs libVulkanMemoryAllocator.a vma_impl.o
-      - name: Size-probe sanity (AllocatorCreateInfo == 80)
-        run: |
-          g++ -std=c++17 -Iinc -Ivh/include scripts/vma_size_probe.cpp -o probe
-          sz=$(./probe | awk '$1 == "AllocatorCreateInfo" { print $2 }')
-          test "$sz" = "80" || { echo "ERROR: AllocatorCreateInfo=$sz expected 80" >&2; exit 1; }
-          sz2=$(./probe | awk '$1 == "AllocationInfo2" { print $2 }')
-          test "$sz2" = "72" || { echo "ERROR: AllocationInfo2=$sz2 expected 72" >&2; exit 1; }
+        run: sh scripts/fetch-vma-headers.sh "$RUNNER_TEMP/sdk"
+      - name: Build static lib (runs the struct-size probe)
+        run: VULKAN_SDK="$RUNNER_TEMP/sdk" sh scripts/build-vma.sh
       - uses: actions/upload-artifact@v4
         with:
           name: libVulkanMemoryAllocator-linux-x64
-          path: libVulkanMemoryAllocator.a
+          path: linked-libs/linux-x64/libVulkanMemoryAllocator.a
+          if-no-files-found: error
           retention-days: 180
 
   windows-x64:
@@ -46,21 +40,60 @@ jobs:
       - uses: actions/checkout@v4
       - name: Fetch headers
         shell: bash
-        run: |
-          git clone --depth 1 --branch "$VULKAN_HEADERS_TAG" https://github.com/KhronosGroup/Vulkan-Headers.git vh
-          git clone --depth 1 --branch "$VMA_TAG" https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git vma
-          mkdir -p inc/vma
-          cp vma/include/vk_mem_alloc.h inc/vma/
+        run: sh scripts/fetch-vma-headers.sh sdk
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
-      - name: Build static lib (MSVC)
+      - name: Build static lib (MSVC, /MT)
         shell: cmd
         run: |
-          cl /std:c++17 /O2 /MT /EHsc /I inc /I vh\include /c scripts\vma_impl.cpp /Fovma_impl.obj
+          cl /std:c++17 /O2 /MT /EHsc /I sdk\include /c scripts\vma_impl.cpp /Fovma_impl.obj
           lib /OUT:VulkanMemoryAllocator.lib vma_impl.obj
       - uses: actions/upload-artifact@v4
         with:
           name: VulkanMemoryAllocator-windows-x64
           path: VulkanMemoryAllocator.lib
+          if-no-files-found: error
           retention-days: 180
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux-x64, windows-x64]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: libVulkanMemoryAllocator-linux-x64
+          path: linked-libs/linux-x64
+      - uses: actions/download-artifact@v4
+        with:
+          name: VulkanMemoryAllocator-windows-x64
+          path: linked-libs/windows-x64
+      - name: Assemble release assets
+        run: |
+          set -eu
+          bundle="vma.c3l"
+          mkdir -p "$bundle"
+          cp manifest.json vma.c3 vma.c3i vma_check.c3 LICENSE README.md "$bundle/"
+          cp -R linked-libs "$bundle/linked-libs"
+          rm -f "$bundle/linked-libs/.gitkeep"
+          zip -qr "vma.c3l-${GITHUB_REF_NAME}.zip" "$bundle"
+          cp linked-libs/linux-x64/libVulkanMemoryAllocator.a libVulkanMemoryAllocator-linux-x64.a
+          cp linked-libs/windows-x64/VulkanMemoryAllocator.lib VulkanMemoryAllocator-windows-x64.lib
+          sha256sum "vma.c3l-${GITHUB_REF_NAME}.zip" libVulkanMemoryAllocator-linux-x64.a VulkanMemoryAllocator-windows-x64.lib > SHA256SUMS
+          cat SHA256SUMS
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            "vma.c3l-${GITHUB_REF_NAME}.zip" \
+            libVulkanMemoryAllocator-linux-x64.a \
+            VulkanMemoryAllocator-windows-x64.lib \
+            SHA256SUMS
