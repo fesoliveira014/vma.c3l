@@ -1,4 +1,5 @@
 # agent/dev-process files, local only
+CLAUDE.md
 .claude/
 .superpowers/
 docs/
