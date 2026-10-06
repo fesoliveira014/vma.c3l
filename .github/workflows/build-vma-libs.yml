@@ -1,9 +1,12 @@
 name: build-vma-libs
 
-# Builds the VMA static libs for every shipped target. On a `v*` tag it also
-# publishes a GitHub release with the libs and a ready-to-vendor `vma.c3l` bundle.
+# Builds the VMA static libs for every shipped target and packs one `.c3l` per
+# platform (`vma-<version>-<platform>.c3l`). Pull requests and manual runs pack
+# version `v0.0.0-dev` and upload the artifacts; a `v*` tag publishes a GitHub
+# release with the packed archives, the raw libs and SHA256SUMS.
 on:
   workflow_dispatch:
+  pull_request:
   push:
     branches: ['**']
     tags: ['v*']
@@ -56,14 +59,17 @@ jobs:
           if-no-files-found: error
           retention-days: 180
 
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
+  package:
     needs: [linux-x64, windows-x64]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
+    env:
+      C3C_VERSION: "0.8.3"
     steps:
       - uses: actions/checkout@v4
+      - name: Initialize test dependency
+        run: git submodule update --init --checkout test/libs/vk.c3l
       - uses: actions/download-artifact@v4
         with:
           name: libVulkanMemoryAllocator-linux-x64
@@ -72,20 +78,53 @@ jobs:
         with:
           name: VulkanMemoryAllocator-windows-x64
           path: linked-libs/windows-x64
-      - name: Assemble release assets
+      - name: Pack per-platform archives
         run: |
           set -eu
-          bundle="vma.c3l"
-          mkdir -p "$bundle"
-          cp manifest.json vma.c3 vma.c3i vma_check.c3 LICENSE README.md "$bundle/"
-          cp -R linked-libs "$bundle/linked-libs"
-          rm -f "$bundle/linked-libs/.gitkeep"
-          zip -qr "vma.c3l-${GITHUB_REF_NAME}.zip" "$bundle"
-          cp linked-libs/linux-x64/libVulkanMemoryAllocator.a libVulkanMemoryAllocator-linux-x64.a
-          cp linked-libs/windows-x64/VulkanMemoryAllocator.lib VulkanMemoryAllocator-windows-x64.lib
-          sha256sum "vma.c3l-${GITHUB_REF_NAME}.zip" libVulkanMemoryAllocator-linux-x64.a VulkanMemoryAllocator-windows-x64.lib > SHA256SUMS
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then version="$GITHUB_REF_NAME"; else version="v0.0.0-dev"; fi
+          mkdir -p dist
+          for platform in linux-x64 windows-x64; do
+            stage="$RUNNER_TEMP/stage-$platform"
+            rm -rf "$stage"
+            mkdir -p "$stage/linked-libs/$platform"
+            cp manifest.json vma.c3 vma.c3i vma_check.c3 LICENSE README.md "$stage/"
+            cp linked-libs/$platform/*VulkanMemoryAllocator.* "$stage/linked-libs/$platform/"
+            (cd "$stage" && find . -type f | sed 's|^\./||' | LC_ALL=C sort | zip -q -X "$GITHUB_WORKSPACE/dist/vma-$version-$platform.c3l" -@)
+          done
+          cp linked-libs/linux-x64/libVulkanMemoryAllocator.a dist/libVulkanMemoryAllocator-linux-x64.a
+          cp linked-libs/windows-x64/VulkanMemoryAllocator.lib dist/VulkanMemoryAllocator-windows-x64.lib
+          cd dist
+          sha256sum vma-*.c3l libVulkanMemoryAllocator-linux-x64.a VulkanMemoryAllocator-windows-x64.lib > SHA256SUMS
           cat SHA256SUMS
+      - name: Install c3c
+        run: |
+          mkdir -p ~/tools
+          curl -fsSL -o /tmp/c3.tar.gz \
+            "https://github.com/c3lang/c3c/releases/download/v${C3C_VERSION}/c3-linux.tar.gz"
+          tar -xzf /tmp/c3.tar.gz -C ~/tools
+          echo "$HOME/tools/c3" >> "$GITHUB_PATH"
+      - name: Smoke-compile each archive
+        run: |
+          set -eu
+          for platform in linux-x64 windows-x64; do
+            archive=$(ls dist/vma-*-"$platform".c3l)
+            dir="$RUNNER_TEMP/smoke-$platform"
+            rm -rf "$dir"; mkdir -p "$dir"
+            unzip -q "$archive" -d "$dir"
+            test -f "$dir/manifest.json"
+            test -n "$(ls "$dir"/linked-libs/"$platform"/)"
+            c3c compile-only --no-obj "$dir"/*.c3 "$dir"/*.c3i \
+              --libdir test/libs --lib vk --target "$platform"
+            rm -rf obj
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vma-release-artifacts
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
       - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -93,7 +132,4 @@ jobs:
             --verify-tag \
             --title "$GITHUB_REF_NAME" \
             --generate-notes \
-            "vma.c3l-${GITHUB_REF_NAME}.zip" \
-            libVulkanMemoryAllocator-linux-x64.a \
-            VulkanMemoryAllocator-windows-x64.lib \
-            SHA256SUMS
+            dist/*
