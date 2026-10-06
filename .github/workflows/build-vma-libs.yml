@@ -23,13 +23,17 @@ permissions:
 
 jobs:
   linux-x64:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - name: Fetch headers
         run: sh scripts/fetch-vma-headers.sh "$RUNNER_TEMP/sdk"
       - name: Build static lib (runs the struct-size probe)
         run: VULKAN_SDK="$RUNNER_TEMP/sdk" sh scripts/build-vma.sh
+      - name: Check glibc 2.35 baseline
+        run: |
+          nm -u linked-libs/linux-x64/libVulkanMemoryAllocator.a | sort -u > undefined.txt
+          ! grep -E '__isoc23_|strlcpy|strlcat|arc4random|pidfd_|__libc_single_threaded' undefined.txt
       - uses: actions/upload-artifact@v4
         with:
           name: libVulkanMemoryAllocator-linux-x64
