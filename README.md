@@ -67,8 +67,9 @@ optional and maps `VkResult` to a fault).
 
 Every `v*` tag runs the `build-vma-libs` workflow, which compiles both targets and
 publishes a GitHub release with three kinds of asset: the two static libs above, a
-`vma.c3l-<tag>.zip` bundle (sources + `manifest.json` + `linked-libs/` for both
-targets, ready to drop into a dependency search path), and `SHA256SUMS`.
+`vma-<tag>-<platform>.c3l` archive per platform (sources, `manifest.json` at the
+zip root and that platform's `linked-libs/<platform>/`, ready to drop into a
+dependency search path), and `SHA256SUMS`.
 
 ## Using it in your project
 
@@ -76,8 +77,8 @@ targets, ready to drop into a dependency search path), and `SHA256SUMS`.
    simplest route is the release bundle, which already contains the static libs:
 
    ```sh
-   curl -fsSLO https://github.com/fesoliveira014/vma.c3l/releases/latest/download/vma.c3l-<tag>.zip
-   unzip vma.c3l-<tag>.zip -d libs          # -> libs/vma.c3l
+   curl -fsSLO https://github.com/fesoliveira014/vma.c3l/releases/download/<tag>/vma-<tag>-linux-x64.c3l
+   mkdir -p libs && mv vma-<tag>-linux-x64.c3l libs/   # c3c resolves it by `provides`
    git clone https://github.com/fesoliveira014/vk.c3l libs/vk.c3l
    ```
 
@@ -165,7 +166,9 @@ does exactly this before it links the smoke harness, and the release workflow
 
 To cut a release: tag a commit `vX.Y.Z` and push the tag. The workflow builds
 `linux-x64` (GCC) and `windows-x64` (MSVC, `/MT`), and publishes the release
-with the libs, the `vma.c3l-vX.Y.Z.zip` bundle, and `SHA256SUMS`.
+with the libs, the `vma-vX.Y.Z-<platform>.c3l` archives, and `SHA256SUMS`. Pull
+requests and manual runs pack the same archives as `v0.0.0-dev` and upload them
+without publishing.
 
 ## Repository layout
 
