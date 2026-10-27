@@ -6,7 +6,7 @@ on:
   pull_request:
 
 env:
-  C3C_VERSION: "0.8.3"
+  C3C_VERSION: "0.8.5_1"
   MESA_DIST_WIN_VERSION: "26.2.0"
 
 jobs:

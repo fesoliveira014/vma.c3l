@@ -69,7 +69,7 @@ jobs:
     permissions:
       contents: write
     env:
-      C3C_VERSION: "0.8.3"
+      C3C_VERSION: "0.8.5_1"
     steps:
       - uses: actions/checkout@v4
       - name: Initialize test dependency
