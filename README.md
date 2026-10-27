@@ -8,11 +8,11 @@ sub-allocates buffers and images out of them. This package wraps VMA's
 `extern "C"` surface in idiomatic C3: the C `vmaXxx` names become
 `vma::create_allocator`, `vma::AllocationCreateInfo`, and so on.
 
-Bound against **VMA 3.3.0** and **C3 0.8.0**.
+Bound against **VMA 3.3.0** and **C3 0.8.5_1**.
 
 ## Requirements
 
-- **C3 0.8.0** (`c3c`). The binding tracks this release; C3 is pre-1.0 and its
+- **C3 0.8.5_1** (`c3c`). The binding tracks this release; C3 is pre-1.0 and its
   syntax drifts between versions.
 - **The `vk` C3 binding** ([vk.c3l](https://github.com/fesoliveira014/vk.c3l)).
   Every VMA signature references Vulkan types (`VkDevice`, `VkBuffer`,
